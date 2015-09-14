@@ -1,7 +1,7 @@
 require 'rake/testtask'
 
 Rake::TestTask.new do |t|
-  t.test_files = FileList['test/unit/*_test.rb']
+  t.test_files = FileList['test/unit/**/*_test.rb']
   t.ruby_opts  << "-r minitest/autorun"
 end
 
@@ -12,3 +12,6 @@ end
 
 
 task :default => :test
+
+
+task :all => [:test, :system]
