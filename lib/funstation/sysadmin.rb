@@ -1,63 +1,86 @@
 module Sysadmin
   class Context
+    attr_reader :shell, :git
+
     def initialize(opts={})
-      @shell_monad = opts.fetch(:shell_src, IO::Command )
-      @git_monad = opts.fetch(:git_src, IO::Git)
+      @shell = opts.fetch(:shell, IO::ShellContext )
+      @git   = opts.fetch(:git, IO::Git)
     end
 
     def run(&block)
-      monad = self.instance_eval &block
-      monad.run
+      runner = Run.new(self)
+      runner.instance_eval &block
       nil
     end
 
-    def cmd(str, &block)
-      @shell_monad.new(str, &block)
-    end
+    class Run
+      def initialize(ctx)
+        @ctx = ctx
+      end
 
-    def git
-      @git_monad.new(self)
+      def cmd(cmd_str)
+        Shell.new.cmd(cmd_str)
+      end
     end
   end
 
-  class Monad
-    def initialize(prev=nil, &block)
+  class Shell
+    def initialize(this=nil, prev=nil)
+      @this = this
       @prev = prev
-      @block = block
     end
 
-    def then(&block)
-      self.class.new(self, &block)
+    def cmd(string)
+      Shell.new(SingleCommand.new(string), self)
     end
 
-    def run
-      if @prev
-        @block.call @prev.run
-      elsif @block
-        @block.call
+    def then(&fn)
+      Shell.new(
+        FnCommand.new(fn),
+        self)
+    end
+
+    def call(context)
+      prev = @prev && @prev.call(context)
+      @this && @this.call(prev, context)
+    end
+
+    class FnCommand
+      def initialize(fn)
+        @fn = fn
+      end
+
+      def call(prev, context)
+        @fn.call(prev)
+      end
+    end
+
+    class SingleCommand
+      def initialize(cmd)
+        @cmd = cmd
+      end
+
+      def call(value, context)
+        io_context.shell_command @cmd
       end
     end
   end
 
   module IO
-    class Command < Monad
-      def initialize(cmd)
-        @cmd = cmd
-      end
-
-      def run
-        `#{@cmd}`
+    class ShellContext
+      def shell_command cmd
+        `#{cmd}`
       end
     end
 
-    class Git < Monad
+    class Git
       def initialize(ctx)
         @ctx = ctx
       end
 
-      def branches(&block)
+      def branches
         @ctx.cmd("git branch --list").then { |raw|
-          block.call(raw.split("\n").map(&:strip))
+          raw.split("\n").map(&:strip)
         }
       end
     end
