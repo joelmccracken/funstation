@@ -31,28 +31,22 @@ module Sysadmin
     end
 
     def cmd(string)
-      Shell.new(SingleCommand.new(string), self)
+      Shell.new(
+
+        SingleCommand.new(string), self)
     end
 
     def then(&fn)
       Shell.new(
-        FnCommand.new(fn),
+        ->(prev, context) {
+          fn.call(prev)
+        },
         self)
     end
 
     def call(context)
       prev = @prev && @prev.call(context)
       @this && @this.call(prev, context)
-    end
-
-    class FnCommand
-      def initialize(fn)
-        @fn = fn
-      end
-
-      def call(prev, context)
-        @fn.call(prev)
-      end
     end
 
     class SingleCommand

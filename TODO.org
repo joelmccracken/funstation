@@ -3,3 +3,4 @@ add TODOs so that I know what should be done next
 
 make *simple* and *effective*
 
+http://codon.com/refactoring-ruby-with-monads#asynchronous-code
