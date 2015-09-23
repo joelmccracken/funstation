@@ -6,19 +6,35 @@ describe Sysadmin do
     Sysadmin::Context.new
   end
 
-  it "runs things" do
-    -> do
-      sys.run {
-        this_is_not_a_method!
-      }
-    end.must_raise NoMethodError
-  end
+  describe "#run" do
+    it "runs things" do
+      -> do
+        sys.run {
+          this_is_not_a_method!
+        }
+      end.must_raise NoMethodError
+    end
 
-  it "does something" do
-    sys.run {
-      cmd("pwd").then { |dir|
-        dir.must_match /Users/
+    it "calls whatever is returned with the IO context" do
+      was_called = false
+      sys.run {
+        ->(context) {
+          was_called = true
+          # TODO assert something about this context thing
+        }
       }
-    }
+      was_called.must_equal true
+    end
+
+    it "supports shell commands" do
+      was_called = false
+      sys.run {
+        cmd("echo 'foobar'").then { |output|
+          output.must_match "foobar"
+          was_called = true
+        }
+      }
+      was_called.must_equal true
+    end
   end
 end

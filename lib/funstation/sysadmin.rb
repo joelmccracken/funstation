@@ -8,16 +8,13 @@ module Sysadmin
     end
 
     def run(&block)
-      runner = Run.new(self)
-      runner.instance_eval &block
+      runner = Run.new
+      needs_context = runner.instance_eval &block
+      needs_context.call(self)
       nil
     end
 
     class Run
-      def initialize(ctx)
-        @ctx = ctx
-      end
-
       def cmd(cmd_str)
         Shell.new.cmd(cmd_str)
       end
@@ -32,7 +29,6 @@ module Sysadmin
 
     def cmd(string)
       Shell.new(
-
         SingleCommand.new(string), self)
     end
 
@@ -55,7 +51,7 @@ module Sysadmin
       end
 
       def call(value, context)
-        io_context.shell_command @cmd
+        context.shell.new.shell_command @cmd
       end
     end
   end
