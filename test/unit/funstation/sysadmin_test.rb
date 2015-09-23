@@ -37,4 +37,10 @@ describe Sysadmin do
       was_called.must_equal true
     end
   end
+
+  describe "cd" do
+    it "allows changing directories" do
+
+    end
+  end
 end

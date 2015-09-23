@@ -3,7 +3,7 @@ module Sysadmin
     attr_reader :shell, :git
 
     def initialize(opts={})
-      @shell = opts.fetch(:shell, IO::ShellContext )
+      @shell = opts.fetch(:shell, IO::Shell )
       @git   = opts.fetch(:git, IO::Git)
     end
 
@@ -18,6 +18,14 @@ module Sysadmin
       def cmd(cmd_str)
         Shell.new.cmd(cmd_str)
       end
+
+      def cd(path)
+        Shell.new.cd(path)
+      end
+
+      def git
+        IO::Git.new(self)
+      end
     end
   end
 
@@ -25,6 +33,11 @@ module Sysadmin
     def initialize(this=nil, prev=nil)
       @this = this
       @prev = prev
+    end
+
+    def cd(path)
+      Shell.new(
+        CDCommand.new(path), self)
     end
 
     def cmd(string)
@@ -45,26 +58,31 @@ module Sysadmin
       @this && @this.call(prev, context)
     end
 
-    class SingleCommand
-      def initialize(cmd)
-        @cmd = cmd
-      end
-
+    SingleCommand = Struct.new(:cmd) do
       def call(value, context)
-        context.shell.new.shell_command @cmd
+        context.shell.new.shell_command cmd
       end
+    end
+
+    CDCommand = Struct.new(:path) do
+
     end
   end
 
   module IO
-    class ShellContext
+    class Shell
       def shell_command cmd
         `#{cmd}`
+      end
+
+      alias :cmd :shell_command
+
+      def foo
       end
     end
 
     class Git
-      def initialize(ctx)
+      def initialize ctx
         @ctx = ctx
       end
 
