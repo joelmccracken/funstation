@@ -1,3 +1,5 @@
+require_relative "sysadmin/io/shell"
+
 module Sysadmin
   class Context
     attr_reader :shell, :git
@@ -70,17 +72,6 @@ module Sysadmin
   end
 
   module IO
-    class Shell
-      def shell_command cmd
-        `#{cmd}`
-      end
-
-      alias :cmd :shell_command
-
-      def foo
-      end
-    end
-
     class Git
       def initialize ctx
         @ctx = ctx
