@@ -23,9 +23,6 @@ module Sysadmin
       end
 
       alias :cmd :shell_command
-
-      def foo
-      end
     end
   end
 end
