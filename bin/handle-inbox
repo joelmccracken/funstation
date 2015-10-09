@@ -3,4 +3,4 @@
 $:.unshift File.join(File.dirname(__FILE__), "../lib")
 require 'funstation'
 
-Funstation::HandleInbox.new.start
+Funstation::HandleInbox.new.call

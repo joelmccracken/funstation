@@ -21,8 +21,6 @@ module Sysadmin
         #     }
         #   end
       end
-
-      alias :cmd :shell_command
     end
   end
 end

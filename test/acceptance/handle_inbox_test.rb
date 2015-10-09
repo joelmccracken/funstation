@@ -6,8 +6,7 @@ describe "handle-inbox" do
   end
 
   it "lists all the files in an inbox directory" do
-    next
-    output = Funstation::HandleInbox.new.start()
+    output = Funstation::HandleInbox.new.call()
     output.must_equal "
 1 item(s):
 ~/tmp_inbox/a_file_to_handle
@@ -15,9 +14,8 @@ describe "handle-inbox" do
   end
 
   it "lists a second file in an inbox directory" do
-    next
     `cd ~; cd tmp_inbox; touch a_file_to_handle2`
-    output = Funstation::HandleInbox.new.start()
+    output = Funstation::HandleInbox.new.call()
     output.must_equal "
 2 item(s):
 ~/tmp_inbox/a_file_to_handle
