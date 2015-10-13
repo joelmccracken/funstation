@@ -1,4 +1,4 @@
-require 'funstation/cli_context'
+require 'funstation/context'
 require 'funstation/root_cli'
 require 'funstation/sysadmin'
 require 'funstation/dirt_alert'
