@@ -3,4 +3,8 @@
 $:.unshift File.join(File.dirname(__FILE__), "../lib")
 require 'funstation'
 
-Funstation::HandleInbox.new.call
+puts Funstation::HandleInbox.new.call(
+  handle_inbox: {
+    directories: ["~/Inbox"]
+  }
+)
