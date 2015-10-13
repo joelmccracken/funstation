@@ -6,7 +6,7 @@ module Funstation
       issues = []
 
       @ctx[:handle_inbox][:directories].each do |dir|
-        issues += Dir["#{dir}/*"]
+        issues += Dir["#{File.expand_path dir}/*"]
       end
 
       display issues
