@@ -5,7 +5,7 @@ module Sysadmin
     attr_reader :shell, :git
 
     def initialize(opts={})
-      @shell = opts.fetch(:shell, IO::Shell )
+      @shell = opts.fetch(:shell, IO::Shell)
       @git   = opts.fetch(:git, IO::Git)
     end
 
