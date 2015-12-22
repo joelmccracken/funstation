@@ -30,7 +30,6 @@ principles
 - ensure good tests
   - quick to run
   - employ fakes around seams
-  -
 - ensure
 
 medium term, move various pieces from dotfiles repo to this repo

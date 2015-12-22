@@ -1,1 +1,1 @@
-This directory houses code that I'm using to set up my computer
+This directory houses experiments with code that is useful for me as I explore APIs.
