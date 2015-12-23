@@ -15,7 +15,8 @@ module Funstation
     end
 
     def config
-      puts context.config.inspect
+      require 'pp'
+      pp context.config
     end
 
     def shell
