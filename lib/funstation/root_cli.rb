@@ -1,17 +1,30 @@
 module Funstation
   class RootCLI
-    def call(context, args)
-      case args[0]
-      when "help" then help
-      when "dirty" then dirty
-      when "config" then config
-      when "shell"    then shell
-      end
-      puts args
+    def command_options
+      {
+        :help => "display help for this command",
+        :dirty => "check for anything that needs to be cared for",
+        :config => "display current configuration",
+        :shell => "open a pry session in the process",
+        :setup => "run initial set up scripts for installed modules"
+      }
+    end
+
+    def call(args)
+      option = (args[0] || "help").to_sym
+      command_options.fetch(option) { raise "#{option} is not a command" }
+      send(option)
     end
 
     def help
-      puts "options: help, dirty, config"
+      puts "options:"
+      command_options.each do |name, description|
+        puts format("  %10s:    #{description}", name)
+      end
+    end
+
+    def dirty
+      puts "not implemented yet"
     end
 
     def config
@@ -24,8 +37,14 @@ module Funstation
       binding.pry
     end
 
+    def setup
+      context.each_module do |mod|
+        mod.new.setup(context)
+      end
+    end
+
     def context
-      @context = Context.new
+      @context = Context.new(Funstation.registered_modules)
     end
   end
 end
