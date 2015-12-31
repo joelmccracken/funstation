@@ -12,9 +12,6 @@ Q how do I integrate with awkward parts of dotfiles repo?
 especially pieces that impact files ??
 how do i test this?
 
-?? seems impossible... would rming dotfiles dir be a good next step?
-or trying to make sure that, if I do make a change, it is a good change?
-
 
 tasks:
 - write funstation bin script to house running needs
