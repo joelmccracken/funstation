@@ -4,5 +4,4 @@ $:.unshift File.join(File.dirname(__FILE__), "../lib")
 require 'funstation'
 
 
-context = Funstation::Context.new
-Funstation::RootCLI.new.call context, ARGV
+Funstation::RootCLI.new.call ARGV
