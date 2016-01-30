@@ -17,6 +17,10 @@ module Funstation
         end
     end
 
+    def data
+      @data ||= Data.load
+    end
+
     def each_module
       config.modules.each do |mod|
         the_mod = registered_modules[mod]
@@ -27,6 +31,13 @@ module Funstation
           $stderr.puts "Unknown module listed in configuration file #{mod}"
         end
       end
+    end
+  end
+
+  class Data
+    def self.load
+      require 'yaml'
+      new(YAML.load_file(File.expand_path "~/.funstation.d/data.yml"))
     end
   end
 
