@@ -26,7 +26,10 @@ module Funstation
     end
 
     def data(args)
-      pp Data.load
+      require 'pp'
+      data = Data.load
+      pp data
+      data.save
     end
 
 

@@ -35,9 +35,31 @@ module Funstation
   end
 
   class Data
+
+    def self.data_file_location
+      File.expand_path "~/.funstation.d/data.yml"
+    end
+
     def self.load
       require 'yaml'
-      new(YAML.load_file(File.expand_path "~/.funstation.d/data.yml"))
+      yaml_file = data_file_location
+
+      data =
+        if File.exists? yaml_file
+          YAML.load_file(yaml_file)
+        else
+          {}
+        end
+      new(data)
+    end
+
+    def initialize(data)
+      require 'yaml'
+      @data = data
+    end
+
+    def save
+      YAML.dump @data, File.open(self.class.data_file_location, "w")
     end
   end
 
