@@ -1,42 +1,25 @@
-# funstation
-workstations are like soooo yesterday
+# Funstation
 
+Because workstations are sooo yesterday.
 
-# Planning
+## Installation
 
-## immediate
-principles:
-- move practical pieces from dotfiles repo
-- ensure short-term compatibility with dotfiles repo
-Q how do I integrate with awkward parts of dotfiles repo?
-especially pieces that impact files ??
-how do i test this?
+Add this line to your application's Gemfile:
 
+Install it yourself as:
 
-tasks:
-- write funstation bin script to house running needs
-- add this repo bin to the front of path
+    $ gem install funstation
 
-short term, start handling immediate needs
-- inboxes
-- dirty repos
-- commands running regularly
-- system status metrics/information
+## Usage
 
-principles
-- ensure good tests
-  - quick to run
-  - employ fakes around seams
-- ensure
+TODO: Write usage instructions here
 
-medium term, move various pieces from dotfiles repo to this repo
+## Development
 
-long term, explore more interesting things
-- extract into separate libraries
-- make as much as possible be pure fp
-- literate programming (?)
-- vm integration testing
+After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake test` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
-## long term
+To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
 
-- explore pure fp style code
+## Contributing
+
+Bug reports and pull requests are welcome on GitHub at https://github.com/joelmccracken/funstation.
