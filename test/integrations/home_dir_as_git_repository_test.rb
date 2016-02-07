@@ -1,6 +1,5 @@
 require 'minitest/spec'
 
-require 'pry'
 require 'tmpdir'
 
 describe "creating a home dir as a git repository" do
