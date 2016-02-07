@@ -11,7 +11,7 @@ Rake::TestTask.new(:system) do |t|
   t.ruby_opts  << "-r minitest/autorun"
 end
 
-Rake::TestTask.new(:test) do |t|
+Rake::TestTask.new(:spec) do |t|
   t.libs << "test"
   t.libs << "lib"
   t.test_files = FileList['test/**/*_test.rb']
