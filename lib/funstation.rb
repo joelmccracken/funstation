@@ -12,7 +12,6 @@ end
 
 require 'funstation/context'
 require 'funstation/root_cli'
-require 'funstation/sysadmin'
 require 'funstation/dirt_alert'
 require 'funstation/handle_inbox'
 require 'funstation/git_home_dir'
