@@ -1,6 +1,6 @@
 module Funstation
-  class PoliteGitCheckout
-    def checkout(target_dir:, repo:)
+  class GitGateway
+    def polite_git_checkout(target_dir:, repo:)
       `
       cd #{target_dir}
       git init  > /dev/null 2>&1
