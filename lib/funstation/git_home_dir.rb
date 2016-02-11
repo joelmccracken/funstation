@@ -11,10 +11,14 @@ module Funstation
       else
         repo = context.config[:git_home_dir_repo]
         puts "Setting up home directory as a git directory..."
-        PoliteGitCheckout.new.checkout(target_dir: target_dir, repo: repo)
+        GitGateway.new.polite_git_checkout(target_dir: target_dir, repo: repo)
         puts "Done setting up home directory."
       end
-   end
+    end
+
+    def status(context)
+
+    end
   end
 
   self.register_module(:git_home_dir, GitHomeDir)
