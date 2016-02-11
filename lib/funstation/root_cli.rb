@@ -3,7 +3,7 @@ module Funstation
     def command_options
       {
         :help => "display help for this command",
-        :dirty => "check for anything that needs to be cared for",
+        :status => "check for anything that needs to be cared for",
         :config => "display current configuration",
         :shell => "open a pry session in the process",
         :setup => "run initial set up scripts for installed modules",
@@ -30,11 +30,6 @@ module Funstation
       data = Data.load
       pp data
       data.save
-    end
-
-
-    def dirty(args)
-      puts "not implemented yet"
     end
 
     def config(args)
