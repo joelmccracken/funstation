@@ -6,34 +6,36 @@ class DirtAlert
     end
 
     def check
-      check_stash
-      check_branches
-      check_dirty
+      check_stash +
+        check_branches +
+        check_dirty
     end
 
     def check_stash
-      git_cmd("stash list").split("\n").each do |stash|
-        @obj.add_message "stash in #{@repo_path}: #{stash}"
+      git_cmd("stash list").split("\n").map do |stash|
+        "stash in #{@repo_path}: #{stash}"
       end
     end
 
     def check_branches
       branches = git_cmd("branch --list").split("\n").map(&:strip)
-      branches.each do |branch|
+      branches.map do |branch|
         branch = filter_current_asterisk branch
         num = num_remote_branches_containing branch
         if num == 0
-          @obj.add_message "branch in #{@repo_path} not pushed: #{branch}"
+          "branch in #{@repo_path} not pushed: #{branch}"
         end
-      end
+      end.compact
     end
 
     def check_dirty
       it = git_dirty_or_untracked
 
-      @obj.add_message "#{@repo_path} has untracked files (#{it.untracked})" if it.untracked > 0
-      @obj.add_message "#{@repo_path} has files with unstaged changes (#{it.unstaged})" if it.unstaged > 0
-      @obj.add_message "#{@repo_path} has files with staged, uncommitted changes (#{it.staged})" if it.staged > 0
+      [
+        it.untracked > 0 && "#{@repo_path} has untracked files (#{it.untracked})",
+        it.unstaged > 0 && "#{@repo_path} has files with unstaged changes (#{it.unstaged})",
+        it.staged > 0 && "#{@repo_path} has files with staged, uncommitted changes (#{it.staged})"
+      ].select { |it| it != false}
     end
 
     def num_remote_branches_containing branch
@@ -47,6 +49,7 @@ class DirtAlert
         branch
       end
     end
+
     def git_cmd rest
       `cd #{@repo_path}; git #{rest}`
     end
@@ -65,7 +68,7 @@ class DirtAlert
       unless @parsed
         @parsed = output.split("\n").map do |line|
           line.split
-        end
+        end.reject { |l| l.length == 0 }
       end
       @parsed
     end
@@ -98,8 +101,8 @@ class DirtAlert
     def check
       Dir.chdir(File.expand_path @incoming_path) do
         content = Dir["*"]
-        content.each do |c|
-          @obj.add_message "File in #{@incoming_path}: #{c}"
+        content.map do |c|
+          "File in #{@incoming_path}: #{c}"
         end
       end
     end
@@ -124,38 +127,23 @@ class DirtAlert
      },
      {
        type: :git,
-       at: "~/emacs/"
-     },
-     {
-       type: :git,
-       at: "~/dotfiles/"
+       at: "~/"
      }]
-  end
-
-  def add_message msg
-    @messages << msg
-  end
-
-  def initialize
-    @messages = []
   end
 
   def go
     puts "detecting loose ends on system..."
 
-    locations.each do |location|
+    issues = locations.flat_map do |location|
       to_check = case location[:type]
-                 when :git then GitRepo.new(location[:at], self)
-                 when :incoming then IncomingDirectory.new(location[:at], self)
+                 when :git then GitRepo.new(location[:at], nil)
+                 when :incoming then IncomingDirectory.new(location[:at], nil)
                  end
       to_check.check
     end
 
-    File.write(File.expand_path("~/var/alerts/number"), @messages.count)
-    File.open(File.expand_path("~/var/alerts/alerts"), "w") do |f|
-      @messages.each do |msg|
-        f.puts msg
-      end
+    issues.each do |msg|
+      puts msg
     end
   end
 end

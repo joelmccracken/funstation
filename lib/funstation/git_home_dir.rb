@@ -1,3 +1,5 @@
+require_relative "./dirt_alert"
+
 module Funstation
   class GitHomeDir
     def setup(context)
@@ -17,7 +19,7 @@ module Funstation
     end
 
     def status(context)
-
+      DirtAlert.new.go
     end
   end
 
