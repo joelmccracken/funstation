@@ -67,7 +67,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.20.1.0
+    build-depends:    base ^>=4.21.0.0
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -90,7 +90,7 @@ executable wshs
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.20.1.0,
+        base ^>=4.21.0.0,
         wshs
 
     -- Directories containing source files.
@@ -123,5 +123,5 @@ test-suite wshs-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.20.1.0,
+        base ^>=4.21.0.0,
         wshs
