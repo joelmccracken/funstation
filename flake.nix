@@ -4,85 +4,80 @@
   inputs.nixpkgs.follows = "haskellNix/nixpkgs-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   outputs = { self, nixpkgs, flake-utils, haskellNix }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
     let
-      overlays = [ haskellNix.overlay
-        (final: _prev: {
-          # This overlay adds our project to pkgs
-          helloProject =
-            final.haskell-nix.project' {
-              src = ./.;
-              compiler-nix-name = "ghc9122";
-              # This is used by `nix develop .` to open a shell for use with
-              # `cabal`, `hlint` and `haskell-language-server`
-              shell.tools = {
-                cabal = {};
-                # hlint = {};
-                # haskell-language-server = {};
-              };
-              # Non-Haskell shell tools go here
-              shell.buildInputs = with pkgs; [
-                nixpkgs-fmt
-              ];
-              # This adds `js-unknown-ghcjs-cabal` to the shell.
-              # shell.crossPlatforms = p: [p.ghcjs];
-            };
-        })
+      systems = [
+        # "x86_64-linux"
+        "x86_64-darwin"
+        # "aarch64-linux"
+        # "aarch64-darwin"
       ];
-      pkgs = import nixpkgs { inherit system overlays; inherit (haskellNix) config; };
-      flake = pkgs.helloProject.flake {
-        # This adds support for `nix build .#js-unknown-ghcjs:hello:exe:hello`
-        # crossPlatforms = p: [p.ghcjs];
+
+      # inherit (nixpkgs) lib;
+
+      static-gmp-overlay = final: prev: {
+        static-gmp = (final.gmp.override { withStatic = true; }).overrideDerivation (old: {
+          configureFlags = old.configureFlags ++ [ "--enable-static" "--disable-shared" ];
+        });
       };
-    in flake // {
-      # Built by `nix build .`
-      packages.default = flake.packages."wshs:exe:wshs";
-    });
+
+      mkNixpkgsForSystem = system: import nixpkgs {
+
+        inherit system;
+
+        # Also ensure we are using haskellNix config. Otherwise we won't be
+        # selecting the correct wine version for cross compilation.
+        inherit (haskellNix) config;
+
+        overlays = [
+          haskellNix.overlay
+          static-gmp-overlay
+        ];
+      };
+
+      # keep it simple (from https://ayats.org/blog/no-flake-utils/)
+      forAllSystems = f:
+        nixpkgs.lib.genAttrs systems (system: f system (mkNixpkgsForSystem system));
+
+      project = pkgs:
+        let
+          add-static-libs-to-darwin = pkgs.lib.mkIf pkgs.hostPlatform.isDarwin {
+            packages.wshs.ghcOptions = [
+              "-L${pkgs.lib.getLib pkgs.static-gmp}/lib"
+            ];
+          };
+
+          static-nix-tools-project = pkgs.haskell-nix.project' {
+
+            compiler-nix-name = "ghc9122";
+
+            src = ./.;
+
+            # tests need to fetch hackage
+            configureArgs = pkgs.lib.mkDefault "--disable-tests";
+
+            modules = [
+              add-static-libs-to-darwin
+            ];
+          };
+        in
+          static-nix-tools-project;
+    in
+      {
+        packages = forAllSystems (system: pkgs:
+          {
+            default = (project pkgs).flake'.packages."wshs:exe:wshs";
+          }
+        );
+      };
+  nixConfig = {
+    extra-substituters = [
+      "https://cache.iog.io"
+      "https://cache.zw3rk.com"
+    ];
+    extra-trusted-public-keys = [
+      "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
+      "loony-tools:pr9m4BkM/5/eSTZlkQyRt57Jz7OMBxNSUiMC4FkcNfk="
+    ];
+    allow-import-from-derivation = "true";
+  };
 }
-
-
-# {
-#   # This is a template created by `hix init`
-#   inputs.haskellNix.url = "github:input-output-hk/haskell.nix";
-#   inputs.nixpkgs.follows = "haskellNix/nixpkgs-unstable";
-#   inputs.flake-utils.url = "github:numtide/flake-utils";
-#   outputs = { self, nixpkgs, flake-utils, haskellNix }:
-#     let
-#       supportedSystems = [
-#         # "x86_64-linux"
-#         "x86_64-darwin"
-#         # "aarch64-linux"
-#         # "aarch64-darwin"
-#       ];
-#     in
-#       flake-utils.lib.eachSystem supportedSystems (system:
-#       let
-#         overlays = [ haskellNix.overlay
-#           (final: prev: {
-#             hixProject =
-#               final.haskell-nix.hix.project {
-#                 src = ./.;
-#                 evalSystem = "x86_64-darwin";
-#               };
-#           })
-#         ];
-#         pkgs = import nixpkgs { inherit system overlays; inherit (haskellNix) config; };
-#         flake = pkgs.hixProject.flake {};
-#       in flake // {
-#         legacyPackages = pkgs;
-
-#         packages = flake.packages // { default = flake.packages."wshs:exe:wshs"; };
-
-#         # apps = {default = "${flake.packages."wshs:exe:wshs"}/bin/wshs";
-#       });
-
-#   # --- Flake Local Nix Configuration ----------------------------
-#   nixConfig = {
-#     # This sets the flake to use the IOG nix cache.
-#     # Nix should ask for permission before using it,
-#     # but remove it here if you do not want it to.
-#     extra-substituters = ["https://cache.iog.io"];
-#     extra-trusted-public-keys = ["hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="];
-#     allow-import-from-derivation = "true";
-#   };
-# }
