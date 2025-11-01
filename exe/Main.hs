@@ -1,7 +1,8 @@
-
-import qualified MyLib (someFunc)
+import qualified WSHS (run)
 
 main :: IO ()
 main = do
+
+
   putStrLn "Hello, Haskell!"
-  MyLib.someFunc
+  WSHS.run

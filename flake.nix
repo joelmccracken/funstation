@@ -144,6 +144,7 @@
               drv = (project pkgs).flake'.packages."wshs:exe:wshs";
               exe = "wshs";
             };
+            wshs = (project pkgs);
           }
         );
       };
