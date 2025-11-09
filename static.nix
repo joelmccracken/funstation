@@ -1,4 +1,4 @@
-{ self, nixpkgs, flake-utils, haskellNix, ... }:
+{ self, system, nixpkgs, haskellNix, ... }:
   let
     interpForSystem = sys:
       let s = {
@@ -74,12 +74,12 @@
          };
    };
 
-   systems = [
-     # "x86_64-linux"
-     "x86_64-darwin"
-     # "aarch64-linux"
-     # "aarch64-darwin"
-   ];
+   # systems = [
+   #   # "x86_64-linux"
+   #   "x86_64-darwin"
+   #   # "aarch64-linux"
+   #   # "aarch64-darwin"
+   # ];
 
 
    static-gmp-overlay = final: prev: {
@@ -104,9 +104,9 @@
      ];
    };
 
-   # keep it simple (from https://ayats.org/blog/no-flake-utils/)
-   forAllSystems = f:
-     nixpkgs.lib.genAttrs systems (system: f system (mkNixpkgsForSystem system));
+   # # keep it simple (from https://ayats.org/blog/no-flake-utils/)
+   # forAllSystems = f:
+   #   nixpkgs.lib.genAttrs systems (system: f system );
 
    project = pkgs:
      let
@@ -131,10 +131,10 @@
        };
      in
        static-nix-tools-project;
+   pkgs = mkNixpkgsForSystem system;
  in
-   forAllSystems (system: pkgs:
      pkgs.make-staticish {
            name = "wshs-static";
            drv = (project pkgs).flake'.packages."wshs:exe:wshs";
            exe = "wshs";
-     })
+     }
