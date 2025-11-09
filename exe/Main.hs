@@ -1,8 +1,5 @@
-import qualified WSHS (run)
+import qualified WSHS
 
 main :: IO ()
 main = do
-
-
-  putStrLn "Hello, Haskell!"
-  WSHS.run
+  WSHS.main

@@ -70,7 +70,8 @@ library
     -- Other library packages from which modules are imported.
     build-depends:    base,
         dhall,
-        text
+        text,
+        optparse-applicative
 
     -- Directories containing source files.
     hs-source-dirs:   src
