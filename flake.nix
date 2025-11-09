@@ -5,6 +5,7 @@
   inputs.flake-utils.url = "github:numtide/flake-utils";
   outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix }:
     let
+      lib = nixpkgs.lib;
       systems = [
         # "x86_64-linux"
         "x86_64-darwin"
@@ -18,13 +19,38 @@
 
       static = import ./static.nix inputs;
     in
+      flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
+        let
+          overlays = [ haskellNix.overlay
+                       (final: _prev: {
+                         # This overlay adds our project to pkgs
+                         wshsProject =
+                           final.haskell-nix.project' {
+                             src = ./.;
+                             compiler-nix-name = "ghc96";
+                             # This is used by `nix develop .` to open a shell for use with
+                             # `cabal`, `hlint` and `haskell-language-server`
+                             shell.tools = {
+                               cabal = {};
+                               # hlint = {};
+                               # haskell-language-server = {};
+                             };
+                             # Non-Haskell shell tools go here
+                             shell.buildInputs = with pkgs; [
+                               nixpkgs-fmt
+                             ];
+                             # This adds `js-unknown-ghcjs-cabal` to the shell.
+                             # shell.crossPlatforms = p: [p.ghcjs];
+                           };
+                       })
+                     ];
+      pkgs = import nixpkgs { inherit system overlays; inherit (haskellNix) config; };
+      flake = pkgs.wshsProject.flake {};
+    in flake //
       {
-        packages = forAllSystems (system:
-          {
-            default = static."${system}";
-          }
-        );
-      };
+        packages = flake.packages // { default = static."${system}"; };
+      });
+
   nixConfig = {
     extra-substituters = [
       "https://cache.iog.io"
