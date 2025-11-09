@@ -1,4 +1,4 @@
-{ self, system, nixpkgs, haskellNix, ... }:
+{ self, system, nixpkgs, haskellNix, compiler-nix-name, ... }:
   let
     interpForSystem = sys:
       let s = {
@@ -118,8 +118,7 @@
 
        static-nix-tools-project = pkgs.haskell-nix.project' {
 
-         compiler-nix-name = "ghc9122";
-
+         inherit compiler-nix-name;
          src = ./.;
 
          # tests need to fetch hackage

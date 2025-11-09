@@ -4,6 +4,8 @@
   inputs.nixpkgs.follows = "haskellNix/nixpkgs-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix }:
+    let compiler-nix-name = "ghc9122";
+    in
     flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
         let
           overlays = [ haskellNix.overlay
@@ -12,7 +14,7 @@
                          wshsProject =
                            final.haskell-nix.project' {
                              src = ./.;
-                             compiler-nix-name = "ghc96";
+                             inherit compiler-nix-name;
                              # This is used by `nix develop .` to open a shell for use with
                              # `cabal`, `hlint` and `haskell-language-server`
                              shell.tools = {
@@ -31,7 +33,7 @@
                      ];
       pkgs = import nixpkgs { inherit system overlays; inherit (haskellNix) config; };
       flake = pkgs.wshsProject.flake {};
-      static = import ./static.nix { inherit self nixpkgs haskellNix system; };
+      static = import ./static.nix { inherit self nixpkgs haskellNix system compiler-nix-name; };
     in flake //
       {
         packages = flake.packages // { default = static; };
