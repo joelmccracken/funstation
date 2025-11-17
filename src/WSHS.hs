@@ -1,6 +1,9 @@
 {-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
 
 module WSHS (main) where
 
@@ -9,9 +12,8 @@ import Options.Applicative
 import Options.Applicative qualified as App
 import Data.Text (Text)
 import qualified Data.Text as T
-import System.Exit (ExitCode(..))
-import System.Process (readProcessWithExitCode)
-
+import Shh (exe, tryFailure, devNull, (&>))
+import GHC.Stack
 
 data Configuration = Configuration
   { dotfilesRepoUrl :: Text
@@ -23,13 +25,11 @@ data Configuration = Configuration
 
 instance D.FromDhall Configuration
 
-
 data Property = Property
   { name :: Text
   , checker :: IO Bool
   , fixer :: IO ()
   }
-
 
 data Command
   = Bootstrap
@@ -87,16 +87,15 @@ xcodeCliTools :: Property
 xcodeCliTools = Property
   { name = "Xcode CLI Tools"
   , checker = do
-      (exitCode, _, _) <- readProcessWithExitCode "pkgutil" ["--pkg-info=com.apple.pkg.CLTools_Executables"] ""
-      return $ exitCode == ExitSuccess
+      result <- tryFailure $ withFrozenCallStack (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables") &> devNull
+      return $ case result of
+        Right _ -> True
+        Left _  -> False
   , fixer = do
-      (exitCode, stdout, stderr) <- readProcessWithExitCode "sudo" ["bash", "-c", "(xcodebuild -license accept; xcode-select --install) || exit 0"] ""
-      case exitCode of
-        ExitSuccess -> putStrLn "Xcode CLI tools installed successfully"
-        ExitFailure _ -> do
-          putStrLn "Failed to install Xcode CLI tools"
-          putStrLn $ "stdout: " ++ stdout
-          putStrLn $ "stderr: " ++ stderr
+      result <- tryFailure $ withFrozenCallStack (exe "sudo" "bash" "-c" "(xcodebuild -license accept; xcode-select --install) || exit 0")  &> devNull
+      case result of
+        Right _ -> putStrLn "Xcode CLI tools installed successfully"
+        Left err -> putStrLn $ "Failed to install Xcode CLI tools: " ++ show err
   }
 
 
@@ -104,17 +103,16 @@ homebrew :: Property
 homebrew = Property
   { name = "homebrew"
   , checker = do
-      (exitCode, _, _) <- readProcessWithExitCode "which" ["brew"] ""
-      return $ exitCode == ExitSuccess
+      result <- tryFailure $ withFrozenCallStack (exe "which" "brew") &> devNull
+      return $ case result of
+        Right _ -> True
+        Left _  -> False
   , fixer = do
-      (exitCode, stdout, stderr) <- readProcessWithExitCode "sudo" ["bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"] ""
+      result <- tryFailure $ withFrozenCallStack (exe "sudo" "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")  &> devNull
 
-      case exitCode of
-        ExitSuccess -> putStrLn "Homebrew installed successfully"
-        ExitFailure _ -> do
-          putStrLn "Failed to install homebrew"
-          putStrLn $ "stdout: " ++ stdout
-          putStrLn $ "stderr: " ++ stderr
+      case result of
+        Right _ -> putStrLn "Homebrew installed successfully"
+        Left err -> putStrLn $ "Failed to install homebrew: " ++ show err
   }
 
 
@@ -122,17 +120,15 @@ git :: Property
 git = Property
   { name = "git"
   , checker = do
-      (exitCode, _, _) <- readProcessWithExitCode "which" ["brew"] ""
-      return $ exitCode == ExitSuccess
+      result <- tryFailure $ withFrozenCallStack (exe "which" "git") &> devNull
+      return $ case result of
+        Right _ -> True
+        Left _  -> False
   , fixer = do
-      (exitCode, stdout, stderr) <- readProcessWithExitCode "brew" ["install", "git"] ""
-
-      case exitCode of
-        ExitSuccess -> putStrLn "Git installed successfully"
-        ExitFailure _ -> do
-          putStrLn "Failed to install git"
-          putStrLn $ "stdout: " ++ stdout
-          putStrLn $ "stderr: " ++ stderr
+      result <- tryFailure $ withFrozenCallStack (exe "brew" "install" "git") &> devNull
+      case result of
+        Right _ -> putStrLn "Git installed successfully"
+        Left err -> putStrLn $ "Failed to install git: " ++ show err
   }
 
 

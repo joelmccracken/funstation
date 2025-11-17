@@ -52,7 +52,7 @@ extra-doc-files:    CHANGELOG.md
 
 
 common warnings
-    ghc-options: -Wall
+    ghc-options: -Wall -Wno-type-defaults
 
 library
     -- Import common warning flags.

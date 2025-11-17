@@ -4,7 +4,9 @@
   inputs.nixpkgs.follows = "haskellNix/nixpkgs-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix }:
-    let compiler-nix-name = "ghc9122";
+    let
+      # compiler-nix-name = "ghc9122";
+      compiler-nix-name = "ghc9102";
     in
     flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
         let
