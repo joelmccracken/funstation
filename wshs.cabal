@@ -71,7 +71,8 @@ library
     build-depends:    base,
         dhall,
         text,
-        optparse-applicative
+        optparse-applicative,
+        shh
 
     -- Directories containing source files.
     hs-source-dirs:   src
