@@ -69,10 +69,12 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:    base,
-        dhall,
+        yaml,
         text,
         optparse-applicative,
-        shh
+        shh,
+        mtl,
+        containers
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -97,6 +99,7 @@ executable wshs
     build-depends:
         base,
         wshs
+
 
     -- Directories containing source files.
     hs-source-dirs:   exe

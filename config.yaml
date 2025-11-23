@@ -1,0 +1,54 @@
+dotfilesRepoUrl: "https://github.com/joelmccracken/dotfiles"
+dotfilesRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
+workstationName: "aeglos"
+props:
+  - sort: git-home-dir
+    git-dir: .git-homedir
+
+  - sort: dotfiles
+    src-dir: dotfiles/
+    files:
+      - type: ln dot
+        name: bashrc
+
+      - type: ln dot
+        name: ghci
+
+      - type: ln dot
+        name: bashrc
+
+      - type: ln dot
+        name: ghci
+
+      - type: ln dot
+        name: gitconfig
+
+      - type: ln dot
+        name: hammerspoon
+
+      - type: ln dot
+        name: nix-channels
+
+      - type: ln dot
+        name: npmrc
+
+      - type: ln dot
+        name: reddup.yml
+
+      - type: ln dot
+        name: zshrc
+
+      - type: ln
+        name: Brewfile
+
+      - type: ln
+        name: Brewfile.lock.json
+
+      - type: ln
+        name: bitbar
+
+      - type: ln dot dir
+        name: config/git
+
+      - type: ln dot dir
+        name: config/doom
