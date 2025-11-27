@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE DerivingStrategies    #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeApplications #-}
@@ -13,20 +14,22 @@
 {-# LANGUAGE RankNTypes #-}
 
 
-module WSHS (main) where
+module WSHS (module WSHS) where
 
 import Options.Applicative
 import Options.Applicative qualified as App
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Either (isRight)
-import Shh (exe, tryFailure, devNull, (&>), capture , (|>))
+import Shh (exe, tryFailure, devNull, (&>), capture , (|>), Proc, Failure)
 import GHC.Stack
 import Data.Yaml (decodeFileThrow, FromJSON)
 import GHC.Generics (Generic)
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
 import Data.Set (Set)
-import Control.Monad (foldM, void)
+import Control.Monad (-- foldM,
+                      void, forM_)
 import Control.Monad.IO.Class
 
 import Control.Monad.State
@@ -49,16 +52,20 @@ data OS = MacOS | Debian | Unknown
 
 data Property = Property
   { name :: Text
+  , attrs :: Map.Map Text Text
   , checker :: WS Bool
   , fixer :: WS ()
   , dependencies :: WS [Property]
   }
 
 instance Eq Property where
-  a == b =  a.name == b.name
+  a == b = a.name == b.name && a.attrs == b.attrs
 
 instance Ord Property where
-  a `compare` b =  a.name `compare` b.name
+  a `compare` b =
+    case a.name `compare` b.name of
+      EQ ->  a.attrs `compare` b.attrs
+      ord -> ord
 
 
 data Command
@@ -73,13 +80,12 @@ data WSState =
   { props :: Set Property
   }
 
-
 type WSStack a = ReaderT Settings (StateT WSState IO) a
 
 newtype WS a
   = WS
   { unWS :: WSStack a
-  } deriving
+  } deriving newtype
   ( Monad
   , MonadReader Settings
   , MonadState WSState
@@ -88,26 +94,20 @@ newtype WS a
   , MonadIO
   )
 
-
 data Settings =
   Settings
   { opts :: Options
   , configuration :: Configuration
   }
 
-
-
 data Options = Options
   { command :: Command
   }
   deriving (Show)
 
-
 -- have a config.yaml in a known location
 -- have a current.yaml at a known location for the "right now" settings
 -- current workstation name, etc
-
-
 
 bootstrapParser :: Parser Command
 bootstrapParser = Bootstrap
@@ -118,7 +118,6 @@ bootstrapParser = Bootstrap
       ( metavar "WORKSTATION"
      <> help "Name of the current workstation" )
 
-
 commandParser :: Parser Command
 commandParser = subparser
   ( App.command "bootstrap"
@@ -127,10 +126,8 @@ commandParser = subparser
     )
   )
 
-
 optionsParser :: Parser Options
 optionsParser = Options <$> commandParser
-
 
 parseOptions :: IO Options
 parseOptions =
@@ -142,7 +139,7 @@ parseOptions =
 
 detectOS :: WS OS
 detectOS = do
-  osCheck  <- liftIO $ tryFailure $ withFrozenCallStack (exe "uname" "-s") |> capture
+  osCheck  <- cmd (exe "uname" "-s" |> capture)
   case osCheck of
     Left e -> error $ "error detecting OS: " <> show e
     Right "Darwin" -> return MacOS
@@ -152,57 +149,59 @@ detectOS = do
 detectLinuxOS :: WS  OS
 detectLinuxOS = do
   -- Check if it's Debian-based
-  debianCheck <- liftIO $ tryFailure $ withFrozenCallStack (exe "test" "-f" "/etc/debian_version") &> devNull
+  debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
   case debianCheck of
     Right _ -> return Debian
     Left _ -> return Unknown
 
+cmd :: Proc a -> WS (Either Failure a)
+cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
 xcodeCliTools :: Property
 xcodeCliTools = Property
   { name = "Xcode CLI Tools"
+  , attrs = mempty
   , checker = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables") &> devNull
+      result <- cmd (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "sudo" "bash" "-c" "(xcodebuild -license accept; xcode-select --install) || exit 0")  &> devNull
+      result <- cmd (exe "sudo" "bash" "-c" "(xcodebuild -license accept; xcode-select --install) || exit 0"  &> devNull)
       case result of
         Right _ -> putStrLn' "Xcode CLI tools installed successfully"
         Left err -> putStrLn' $ "Failed to install Xcode CLI tools: " <> tshow err
   , dependencies = return []
   }
 
-
 homebrew :: Property
 homebrew = Property
   { name = "homebrew"
+  , attrs = mempty
   , checker = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "which" "brew") &> devNull
+      result <- cmd (exe "which" "brew" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "sudo" "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")  &> devNull
-
+      result <- cmd (exe "sudo" "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  &> devNull)
       case result of
         Right _ -> putStrLn' "Homebrew installed successfully"
         Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
   , dependencies = return [xcodeCliTools]
   }
 
-
 gitMacOS :: Property
 gitMacOS = Property
   { name = "git (macOS via Homebrew)"
+  , attrs = mempty
   , checker = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "which" "git") &> devNull
+      result <- cmd (exe "which" "git" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "brew" "install" "git") &> devNull
+      result <- cmd (exe "brew" "install" "git" &> devNull)
       case result of
         Right _ -> putStrLn' "Git installed successfully"
         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -215,11 +214,13 @@ aptUpdate = Property
   { name = "apt package lists updated"
   , checker = return False  -- Always run update to be safe
   , fixer = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "sudo" "apt-get" "update") &> devNull
+      result <- cmd (exe "sudo" "apt-get" "update" &> devNull)
       case result of
         Right _ -> putStrLn' "apt package sets updated successfully"
         Left err -> putStrLn' $ "Failed to update apt: " <> tshow err
   , dependencies = return []
+    , attrs = mempty
+
   }
 
 
@@ -229,21 +230,24 @@ gitDebian :: Property
 gitDebian = Property
   { name = "git (Debian via apt)"
   , checker = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "which" "git") &> devNull
+      result <- cmd (exe "which" "git" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "sudo" "apt-get" "install" "-y" "git") &> devNull
+      result <- cmd(exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
       case result of
         Right _ -> putStrLn' "Git installed successfully"
         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
   , dependencies = return []
+   , attrs = mempty
+
   }
 
 basicSetup :: Property
 basicSetup = Property
   { name = "basic setup"
+  , attrs = mempty
   , checker = return True  -- This is a meta-property, always "valid" since it just orchestrates others
   , fixer = return ()       -- No direct action needed
   , dependencies = do
@@ -260,9 +264,10 @@ hasCmd :: Text -> Property
 hasCmd name = do
   Property
     { name = "has cmd " <> name
+    , attrs = mempty
     , dependencies = return []
-    , checker = isRight <$> (liftIO $ tryFailure $ withFrozenCallStack (exe "which" (T.unpack name)) &> devNull)
-    , fixer = error $ "hasCmdP: unable to install commaand with this property " ++ T.unpack name
+    , checker = isRight <$> (cmd (exe "which" (T.unpack name)  &> devNull))
+    , fixer = error $ "hasCmdP: unable to install command with this property " ++ T.unpack name
     }
 
 hasGit :: Property
@@ -280,12 +285,12 @@ hasGit =
       case os of
         Unknown -> error "error: Unknown OS, unable to install git"
         MacOS -> do
-          result <- liftIO $ tryFailure $ withFrozenCallStack (exe "brew" "install" "git") &> devNull
+          result <- cmd (exe "brew" "install" "git" &> devNull)
           case result of
             Right _ -> putStrLn' "Git installed successfully"
             Left err -> error $ "Failed to install git: " ++ show err
         Debian -> do
-          result <- liftIO $ tryFailure $ withFrozenCallStack (exe "sudo" "apt-get" "install" "-y" "git") &> devNull
+          result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
           case result of
             Right _ -> putStrLn' "Git installed successfully"
             Left err -> error $ "Failed to install git: " ++ show err
@@ -304,38 +309,37 @@ hasGit =
 --         Unknown -> do
 --           putStrLn' "Warning: Unknown OS, skipping OS-specific setup"
 --           return []
-
 --   }
 
 gitTrackHome :: Property
 gitTrackHome = Property
   { name = "git track home dir"
   , dependencies = return [hasGit]
+  , attrs = mempty
   , checker = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "which" "git") &> devNull
+      result <- cmd (exe "which" "git" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- liftIO $ tryFailure $ withFrozenCallStack (exe "brew" "install" "git") &> devNull
+      result <- cmd (exe "brew" "install" "git" &> devNull)
       case result of
         Right _ -> putStrLn' "Git installed successfully"
         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
   }
 
+ensureProperty :: Property -> WS ()
+ensureProperty prop = do
+  wsstate <-  get
+  let seen = wsstate.props
 
-
-
-
-ensurePropertyWithTracking :: Set Text -> Property -> WS (Set Text)
-ensurePropertyWithTracking seen prop = do
-  -- Skip if we've already processed this property
-  if Set.member prop.name seen
-    then return seen
+  if Set.member prop seen
+    then return ()
     else do
       -- First, ensure all dependencies
       deps <- prop.dependencies
-      seen' <- foldM ensurePropertyWithTracking seen deps
+      -- TODO handle circular dependencies possibility
+      forM_ deps ensureProperty
 
       -- Now check and fix this property
       putStrLn' $ "Checking property: " <> prop.name
@@ -346,14 +350,7 @@ ensurePropertyWithTracking seen prop = do
           putStrLn' "  ✗ Invalid, applying fix..."
           prop.fixer
 
-      -- Mark this property as seen
-      return $ Set.insert prop.name seen'
-
-ensureProperty :: Property -> WS ()
-ensureProperty prop = do
-  _ <- ensurePropertyWithTracking Set.empty prop
-  return ()
-
+      put $ wsstate { props = Set.insert prop seen}
 
 putStrLn' :: Text -> WS ()
 putStrLn' t = liftIO $ putStrLn $ T.unpack t
@@ -370,4 +367,5 @@ main = do
         putStrLn' "\nEnsuring properties..."
         ensureProperty basicSetup
 
+tshow :: Show s => s -> Text
 tshow = T.pack . show
