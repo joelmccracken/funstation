@@ -21,89 +21,17 @@ import Options.Applicative qualified as App
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Either (isRight)
-import Shh (exe, tryFailure, devNull, (&>), capture , (|>), Proc, Failure)
-import GHC.Stack
-import Data.Yaml (decodeFileThrow, FromJSON)
-import GHC.Generics (Generic)
+import Shh (exe, devNull, (&>),  )
+import Data.Yaml (decodeFileThrow)
+-- import Data.Maybe (isJust)
 import qualified Data.Set as Set
-import qualified Data.Map.Strict as Map
-import Data.Set (Set)
-import Control.Monad (-- foldM,
-                      void, forM_)
+import Control.Monad (void, forM_)
 import Control.Monad.IO.Class
-
+import WSHS.Types
+import WSHS.Types.Configuration
 import Control.Monad.State
 import Control.Monad.Reader
-
-
-data Configuration = Configuration
-  { dotfilesRepoUrl :: Text
-  , dotfilesRepoOrigin :: Text
-  , workstationName :: Text
-  }
-  deriving (Generic, Show, FromJSON)
-
-
-
-
-
-data OS = MacOS | Debian | Unknown
-  deriving (Show, Eq)
-
-data Property = Property
-  { name :: Text
-  , attrs :: Map.Map Text Text
-  , checker :: WS Bool
-  , fixer :: WS ()
-  , dependencies :: WS [Property]
-  }
-
-instance Eq Property where
-  a == b = a.name == b.name && a.attrs == b.attrs
-
-instance Ord Property where
-  a `compare` b =
-    case a.name `compare` b.name of
-      EQ ->  a.attrs `compare` b.attrs
-      ord -> ord
-
-
-data Command
-  = Bootstrap
-    { configPath :: FilePath
-    , workstation :: Text
-    }
-  deriving (Show)
-
-data WSState =
-  WSState
-  { props :: Set Property
-  }
-
-type WSStack a = ReaderT Settings (StateT WSState IO) a
-
-newtype WS a
-  = WS
-  { unWS :: WSStack a
-  } deriving newtype
-  ( Monad
-  , MonadReader Settings
-  , MonadState WSState
-  , Applicative
-  , Functor
-  , MonadIO
-  )
-
-data Settings =
-  Settings
-  { opts :: Options
-  , configuration :: Configuration
-  }
-
-data Options = Options
-  { command :: Command
-  }
-  deriving (Show)
+import WSHS.Commands qualified as Cmd
 
 -- have a config.yaml in a known location
 -- have a current.yaml at a known location for the "right now" settings
@@ -137,71 +65,44 @@ parseOptions =
       <> header "wshs - manage workstation configurations"
     )
 
-detectOS :: WS OS
-detectOS = do
-  osCheck  <- cmd (exe "uname" "-s" |> capture)
-  case osCheck of
-    Left e -> error $ "error detecting OS: " <> show e
-    Right "Darwin" -> return MacOS
-    Right "Linux" -> detectLinuxOS
-    Right _ -> return Unknown
-
-detectLinuxOS :: WS  OS
-detectLinuxOS = do
-  -- Check if it's Debian-based
-  debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
-  case debianCheck of
-    Right _ -> return Debian
-    Left _ -> return Unknown
-
-cmd :: Proc a -> WS (Either Failure a)
-cmd c = liftIO $ tryFailure $ withFrozenCallStack c
-
-xcodeCliTools :: Property
+xcodeCliTools :: Property WS
 xcodeCliTools = Property
   { name = "Xcode CLI Tools"
   , attrs = mempty
   , checker = do
-      result <- cmd (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables" &> devNull)
-      return $ case result of
-        Right _ -> True
-        Left _  -> False
+      isRight <$> Cmd.cmd (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables" &> devNull)
   , fixer = do
-      result <- cmd (exe "sudo" "bash" "-c" "(xcodebuild -license accept; xcode-select --install) || exit 0"  &> devNull)
+      result <- Cmd.cmd (exe "sudo" "bash" "-c" "(xcodebuild -license accept; xcode-select --install) || exit 0"  &> devNull)
       case result of
         Right _ -> putStrLn' "Xcode CLI tools installed successfully"
         Left err -> putStrLn' $ "Failed to install Xcode CLI tools: " <> tshow err
   , dependencies = return []
   }
 
-homebrew :: Property
+homebrew :: Property WS
 homebrew = Property
   { name = "homebrew"
   , attrs = mempty
-  , checker = do
-      result <- cmd (exe "which" "brew" &> devNull)
-      return $ case result of
-        Right _ -> True
-        Left _  -> False
+  , checker = Cmd.hasCmd "brew"
   , fixer = do
-      result <- cmd (exe "sudo" "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  &> devNull)
+      result <- Cmd.cmd (exe "sudo" "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  &> devNull)
       case result of
         Right _ -> putStrLn' "Homebrew installed successfully"
         Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
   , dependencies = return [xcodeCliTools]
   }
 
-gitMacOS :: Property
+gitMacOS :: Property WS
 gitMacOS = Property
   { name = "git (macOS via Homebrew)"
   , attrs = mempty
   , checker = do
-      result <- cmd (exe "which" "git" &> devNull)
+      result <- Cmd.cmd (exe "which" "git" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- cmd (exe "brew" "install" "git" &> devNull)
+      result <- Cmd.cmd (exe "brew" "install" "git" &> devNull)
       case result of
         Right _ -> putStrLn' "Git installed successfully"
         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -209,12 +110,12 @@ gitMacOS = Property
   }
 
 
-aptUpdate :: Property
+aptUpdate :: Property WS
 aptUpdate = Property
   { name = "apt package lists updated"
   , checker = return False  -- Always run update to be safe
   , fixer = do
-      result <- cmd (exe "sudo" "apt-get" "update" &> devNull)
+      result <- Cmd.cmd (exe "sudo" "apt-get" "update" &> devNull)
       case result of
         Right _ -> putStrLn' "apt package sets updated successfully"
         Left err -> putStrLn' $ "Failed to update apt: " <> tshow err
@@ -226,16 +127,16 @@ aptUpdate = Property
 
 
 
-gitDebian :: Property
+gitDebian :: Property WS
 gitDebian = Property
   { name = "git (Debian via apt)"
   , checker = do
-      result <- cmd (exe "which" "git" &> devNull)
+      result <- Cmd.cmd (exe "which" "git" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- cmd(exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
+      result <- Cmd.cmd(exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
       case result of
         Right _ -> putStrLn' "Git installed successfully"
         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -244,14 +145,14 @@ gitDebian = Property
 
   }
 
-basicSetup :: Property
+basicSetup :: Property WS
 basicSetup = Property
   { name = "basic setup"
   , attrs = mempty
   , checker = return True  -- This is a meta-property, always "valid" since it just orchestrates others
   , fixer = return ()       -- No direct action needed
   , dependencies = do
-      os <- detectOS
+      os <- Cmd.detectOS
       case os of
         MacOS -> return [homebrew, gitMacOS]
         Debian -> return [gitDebian]
@@ -260,37 +161,37 @@ basicSetup = Property
           return []
   }
 
-hasCmd :: Text -> Property
+hasCmd :: Text -> Property WS
 hasCmd name = do
   Property
     { name = "has cmd " <> name
     , attrs = mempty
     , dependencies = return []
-    , checker = isRight <$> (cmd (exe "which" (T.unpack name)  &> devNull))
+    , checker = isRight <$> (Cmd.cmd (exe "which" (T.unpack name)  &> devNull))
     , fixer = error $ "hasCmdP: unable to install command with this property " ++ T.unpack name
     }
 
-hasGit :: Property
+hasGit :: Property WS
 hasGit =
     (hasCmd "git") { fixer , dependencies }
   where
     dependencies = do
-      os <- detectOS
+      os <- Cmd.detectOS
       case os of
         MacOS -> return [homebrew]
         Debian -> return [aptUpdate]
         Unknown -> error "error: Unknown OS, unable to install git"
     fixer  = do
-      os <- detectOS
+      os <- Cmd.detectOS
       case os of
         Unknown -> error "error: Unknown OS, unable to install git"
         MacOS -> do
-          result <- cmd (exe "brew" "install" "git" &> devNull)
+          result <- Cmd.cmd (exe "brew" "install" "git" &> devNull)
           case result of
             Right _ -> putStrLn' "Git installed successfully"
             Left err -> error $ "Failed to install git: " ++ show err
         Debian -> do
-          result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
+          result <- Cmd.cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
           case result of
             Right _ -> putStrLn' "Git installed successfully"
             Left err -> error $ "Failed to install git: " ++ show err
@@ -311,24 +212,24 @@ hasGit =
 --           return []
 --   }
 
-gitTrackHome :: Property
+gitTrackHome :: Property WS
 gitTrackHome = Property
   { name = "git track home dir"
   , dependencies = return [hasGit]
   , attrs = mempty
   , checker = do
-      result <- cmd (exe "which" "git" &> devNull)
+      result <- Cmd.cmd (exe "which" "git" &> devNull)
       return $ case result of
         Right _ -> True
         Left _  -> False
   , fixer = do
-      result <- cmd (exe "brew" "install" "git" &> devNull)
+      result <- Cmd.cmd (exe "brew" "install" "git" &> devNull)
       case result of
         Right _ -> putStrLn' "Git installed successfully"
         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
   }
 
-ensureProperty :: Property -> WS ()
+ensureProperty :: Property WS -> WS ()
 ensureProperty prop = do
   wsstate <-  get
   let seen = wsstate.props
