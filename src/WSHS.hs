@@ -96,11 +96,7 @@ gitMacOS :: Property WS
 gitMacOS = Property
   { name = "git (macOS via Homebrew)"
   , attrs = mempty
-  , checker = do
-      result <- Cmd.cmd (exe "which" "git" &> devNull)
-      return $ case result of
-        Right _ -> True
-        Left _  -> False
+  , checker = Cmd.hasCmd "git"
   , fixer = do
       result <- Cmd.cmd (exe "brew" "install" "git" &> devNull)
       case result of
@@ -120,21 +116,14 @@ aptUpdate = Property
         Right _ -> putStrLn' "apt package sets updated successfully"
         Left err -> putStrLn' $ "Failed to update apt: " <> tshow err
   , dependencies = return []
-    , attrs = mempty
+  , attrs = mempty
 
   }
-
-
-
 
 gitDebian :: Property WS
 gitDebian = Property
   { name = "git (Debian via apt)"
-  , checker = do
-      result <- Cmd.cmd (exe "which" "git" &> devNull)
-      return $ case result of
-        Right _ -> True
-        Left _  -> False
+  , checker = Cmd.hasCmd "git"
   , fixer = do
       result <- Cmd.cmd(exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
       case result of
@@ -167,7 +156,7 @@ hasCmd name = do
     { name = "has cmd " <> name
     , attrs = mempty
     , dependencies = return []
-    , checker = isRight <$> (Cmd.cmd (exe "which" (T.unpack name)  &> devNull))
+    , checker = Cmd.hasCmd name
     , fixer = error $ "hasCmdP: unable to install command with this property " ++ T.unpack name
     }
 
@@ -196,32 +185,16 @@ hasGit =
             Right _ -> putStrLn' "Git installed successfully"
             Left err -> error $ "Failed to install git: " ++ show err
 
-
--- hasGit :: Property
--- hasGit =
---   Property
---   { name = "git is installed"
---   , checker = hasCmdP "git"
---   , dependencies = do
---       os <- detectOS
---       case os of
---         MacOS -> return [homebrew, gitMacOS]
---         Debian -> return [aptUpdate, gitDebian]
---         Unknown -> do
---           putStrLn' "Warning: Unknown OS, skipping OS-specific setup"
---           return []
---   }
-
 gitTrackHome :: Property WS
 gitTrackHome = Property
   { name = "git track home dir"
   , dependencies = return [hasGit]
   , attrs = mempty
   , checker = do
-      result <- Cmd.cmd (exe "which" "git" &> devNull)
-      return $ case result of
-        Right _ -> True
-        Left _  -> False
+
+      _res <- Cmd.hasCmd "git"
+      -- withPropCfg "git-home-dir" Nothing (\x -> pure $ Just ("" :: Text))
+      undefined
   , fixer = do
       result <- Cmd.cmd (exe "brew" "install" "git" &> devNull)
       case result of
@@ -262,7 +235,7 @@ main = do
   case opts.command of
     Bootstrap cfgPath ws -> do
       cfg <- decodeFileThrow cfgPath :: IO Configuration
-      void $ flip runStateT (WSState {props = mempty }) $ flip runReaderT (Settings opts cfg) $ unWS $ do
+      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings opts cfg) $ unWS $ do
         liftIO $ print cfg
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
