@@ -70,6 +70,7 @@ library
     -- Other library packages from which modules are imported.
     build-depends:    base,
         yaml,
+        aeson,
         text,
         optparse-applicative,
         shh,
@@ -109,7 +110,7 @@ executable wshs
 
 test-suite wshs-test
     -- Import common warning flags.
-    import:           warnings
+    -- import:           warnings
 
     -- Base language which the package is written in.
     default-language: GHC2021
@@ -132,4 +133,10 @@ test-suite wshs-test
     -- Test dependencies.
     build-depends:
         base,
+        hspec,
+        raw-strings-qq,
+        text,
+        yaml,
+        aeson,
+
         wshs
