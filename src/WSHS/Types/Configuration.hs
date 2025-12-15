@@ -3,7 +3,6 @@
 module WSHS.Types.Configuration where
 
 import Data.Text (Text)
-import Data.Yaml (FromJSON, Value)
 import Data.Aeson.Types
 import Data.Aeson.TH
 import GHC.Generics (Generic)
@@ -11,7 +10,7 @@ import GHC.Generics (Generic)
 data GitHomeDirPS = GitHomeDirPS { gitDir :: Text }
  deriving Show
 
-$(deriveJSON defaultOptions ''GitHomeDirPS)
+deriveJSON defaultOptions ''GitHomeDirPS
 
 data PropSettings
   = GitHomeDir GitHomeDirPS
