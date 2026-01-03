@@ -4,7 +4,7 @@ workstationName: "aeglos"
 properties:
   - type: GitHomeDir
     params:
-      git-dir: .git-homedir
+      gitDir: .git-homedir
 
   # - type: Dotfiles
   #   params:

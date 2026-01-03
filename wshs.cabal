@@ -59,7 +59,8 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  WSHS, WSHS.Types, WSHS.Types.Configuration, WSHS.Commands
+    exposed-modules:  WSHS, WSHS.Types, WSHS.Types.Configuration
+   -- , WSHS.Commands
 
     -- Modules included in this library but not exported.
     -- other-modules:
