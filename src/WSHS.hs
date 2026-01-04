@@ -60,7 +60,7 @@ data Settings = Settings
   }
 
 data Property
-  = GitHomeDir GitHomeDirP
+  = GitHomeDir GitTrackHomeDirP
   | BasicSetup BasicSetupP
   deriving (Show, Generic)
 
@@ -153,6 +153,7 @@ hasCmd' cmdName = isJust <$> which cmdName
 class Prop p where
   desc :: p -> Text
   attrs :: p -> Map.Map Text Text
+  -- checker: return true if property already fulfilled, false if fixer is required
   checker :: p -> WS Bool
   fixer :: p -> WS ()
   dependencies :: p -> WS [IsProp]
@@ -168,7 +169,8 @@ instance Prop IsProp where
   dependencies (IsProp p) =  dependencies p
 
 instance Eq IsProp where
-  (IsProp a) == (IsProp b) = desc a == desc b && attrs  a == attrs b
+  (IsProp a) == (IsProp b) = do
+    desc a == desc b && attrs a == attrs b
 
 instance Ord IsProp  where
   (IsProp a) `compare` (IsProp b) =
@@ -179,15 +181,43 @@ instance Ord IsProp  where
 -- unIsProp :: IsProp -> (forall p. IsProp p => p -> a) -> a
 -- unIsProp (IsProp p) f = f p
 
-data GitHomeDirP = GitHomeDirP { gitDir :: Text }
+-- data ExampleP = ExampleP
+--   deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+-- instance Prop ExampleP where
+--   desc _ = undefined
+--   attrs _ = undefined
+--   checker _ = undefined
+--   fixer _ = undefined
+--   dependencies _ = undefined
+
+
+data GitTrackHomeDirP = GitTrackHomeDirP { gitDir :: Text }
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
-instance Prop GitHomeDirP where
-  desc = undefined
-  attrs = undefined
-  checker = undefined
-  fixer = undefined
-  dependencies = undefined
+instance Prop GitTrackHomeDirP where
+  desc _ = "git track home dir"
+  attrs p = Map.fromList [("gitDir", gitDir p)]
+  checker p =
+    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d $HOME/", T.unpack $ gitDir p])
+  fixer p = do
+    let cmdtxt = [ "export GIT_DIR='"
+                 , T.unpack $ gitDir p
+                 , "'; "
+                 , concat [ "("
+                          , "cd $HOME; "
+                          , "git init .; "
+                          , "git config --local --get-all core.bare true >/dev/null && "
+                          , "git config --local --replace-all core.bare false true "
+                          , ")"
+                          ]
+                 ]
+    result <- cmd (exe "bash" "-c" $ concat cmdtxt )
+    case result of
+      Right _ -> putStrLn' "home dir git tracking setup successfully"
+      Left err -> putStrLn' $ "Failed setting up home dir git tracking: " <> tshow err
+
+  dependencies _ = return [IsProp HasGitP]
 
 data BasicSetupP = BasicSetupP
  deriving (Eq, Show, Generic, FromJSON, ToJSON)
@@ -197,17 +227,7 @@ instance Prop BasicSetupP where
   attrs _ = mempty
   checker _ = return True -- dummy prop, wrapper for dependencies
   fixer _ = return () -- all action in dependencies
-  dependencies _ = do
-      os <- detectOS
-      case os of
-        MacOS -> return [ (IsProp HomebrewP)
-                        , (IsProp GitMacOSP)
-                        ]
-        Debian -> return [ (IsProp GitDebianP)
-                         ]
-        Unknown -> do
-          putStrLn' "Warning: Unknown OS, skipping OS-specific setup"
-          return []
+  dependencies _ = return [ (IsProp HasGitP) ]
 
 data GitMacOSP = GitMacOSP
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
@@ -237,22 +257,35 @@ instance Prop GitDebianP where
       Right _ -> putStrLn' "Git installed successfully"
       Left err -> putStrLn' $ "Failed to install git: " <> tshow err
   dependencies _ = do
-    -- hasGit <- hasCmd' "git"
     hasCmd' "git" >>= bool (return [(IsProp AptUpdateP)]) (return [])
-  -- ^^ if hasCmd git, then I don't need to update apt, but if not, I need to
-  -- however, i'd rather not update again if I've done it previously.
-  -- hmm. oh, maybe in dependendencies I run `checker`, only returns requries apt update
-  -- if no git cmd exists?
 
--- data ExampleP = ExampleP
---   deriving (Eq, Show, Generic, FromJSON, ToJSON)
+data HasGitP = HasGitP
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
--- instance Prop ExampleP where
---   desc _ = undefined
---   attrs _ = undefined
---   checker _ = undefined
---   fixer _ = undefined
---   dependencies _ = undefined
+instance Prop HasGitP where
+  desc _ = "has command `git` installed"
+  attrs _ = mempty
+  checker _ = hasCmd' "git"
+  dependencies _ = do
+    os <- detectOS
+    case os of
+      MacOS -> return [(IsProp HomebrewP)]
+      Debian -> return [(IsProp AptUpdateP)]
+      Unknown -> error "error: Unknown OS, unable to install git"
+  fixer _ = do
+    os <- detectOS
+    case os of
+      Unknown -> error "error: Unknown OS, unable to install git"
+      MacOS -> do
+        result <- cmd (exe "brew" "install" "git" &> devNull)
+        case result of
+          Right _ -> putStrLn' "Git installed successfully"
+          Left err -> error $ "Failed to install git: " ++ show err
+      Debian -> do
+        result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
+        case result of
+          Right _ -> putStrLn' "Git installed successfully"
+          Left err -> error $ "Failed to install git: " ++ show err
 
 data XCodeCLIToolsP = XCodeCLIToolsP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
@@ -281,7 +314,6 @@ instance Prop HomebrewP where
       Right _ -> putStrLn' "Homebrew installed successfully"
       Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
   dependencies _ = return [ (IsProp XCodeCLIToolsP) ]
-
 
 data AptUpdateP = AptUpdateP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
@@ -329,63 +361,6 @@ parseOptions =
       <> header "wshs - manage workstation configurations"
     )
 
-
-
-
-
-
--- hasCmd :: Text -> Property WS
--- hasCmd name = do
---   Property
---     { name = "has cmd " <> name
---     , attrs = mempty
---     , dependencies = return []
---     , checker = hasCmd' name
---     , fixer = error $ "hasCmdP: unable to install command with this property " ++ T.unpack name
---     }
-
--- hasGit :: Property WS
--- hasGit =
---     (hasCmd "git") { fixer , dependencies }
---   where
---     dependencies = do
---       os <- detectOS
---       case os of
---         MacOS -> return [homebrew]
---         Debian -> return [aptUpdate]
---         Unknown -> error "error: Unknown OS, unable to install git"
---     fixer  = do
---       os <- detectOS
---       case os of
---         Unknown -> error "error: Unknown OS, unable to install git"
---         MacOS -> do
---           result <- cmd (exe "brew" "install" "git" &> devNull)
---           case result of
---             Right _ -> putStrLn' "Git installed successfully"
---             Left err -> error $ "Failed to install git: " ++ show err
---         Debian -> do
---           result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
---           case result of
---             Right _ -> putStrLn' "Git installed successfully"
---             Left err -> error $ "Failed to install git: " ++ show err
-
--- gitTrackHome :: Property WS
--- gitTrackHome = Property
---   { name = "git track home dir"
---   , dependencies = return [hasGit]
---   , attrs = mempty
---   , checker = do
-
---       _res <- hasCmd' "git"
---       -- withPropCfg "git-home-dir" Nothing (\x -> pure $ Just ("" :: Text))
---       undefined
---   , fixer = do
---       result <- cmd (exe "brew" "install" "git" &> devNull)
---       case result of
---         Right _ -> putStrLn' "Git installed successfully"
---         Left err -> putStrLn' $ "Failed to install git: " <> tshow err
---   }
-
 ensureProperty :: Prop p => p -> WS ()
 ensureProperty prop = do
   wsstate <- get
@@ -425,3 +400,4 @@ main = do
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
         ensureProperty (IsProp BasicSetupP)
+        forM_ (getProp <$> cfg.properties) ensureProperty
