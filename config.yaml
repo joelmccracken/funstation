@@ -1,14 +1,28 @@
-dotfilesRepoUrl: "https://github.com/joelmccracken/dotfiles"
-dotfilesRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
-workstationName: "aeglos"
+configDir: "~/.config/wshs"
+configRepoUrl: "https://github.com/joelmccracken/dotfiles"
+configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
+configRepoBranch: "wshs"
+workstations:
+  - workstationName: "aeglos"
 properties:
   - type: GitHomeDir
     params:
       gitDir: .git-homedir
+  - type: Dotfiles
+    params:
+      srcDir: "~/.config/wshs/dotfiles"
+      files:
+        - src: bashrc
+          dot: true
+          symlink: true
+          dir: false
+        - src: config/git
+          dot: true
+          symlink: true
+          dir: true
 
   # - type: Dotfiles
   #   params:
-
   #   src-dir: dotfiles/
   #   files:
   #     - type: ln dot

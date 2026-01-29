@@ -18,19 +18,23 @@ module WSHS (module WSHS) where
 
 import Options.Applicative
 import Options.Applicative qualified as App
+-- import Shelly qualified as S
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
+-- import Path qualified
+-- import Path ((</>))
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
 import Data.Maybe (isJust)
 import GHC.Stack
-import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure )
+import Data.List (intercalate)
+import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (&!>), Stream(StdOut) )
 import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Bool (bool)
-import Control.Monad (void, forM_)
+import Control.Monad (void, forM_, forM, unless)
 import Control.Monad.IO.Class
 --import WSHS.Types
 -- import WSHS.Types.Configuration
@@ -61,7 +65,7 @@ data Settings = Settings
 
 data Property
   = GitHomeDir GitTrackHomeDirP
-  | BasicSetup BasicSetupP
+  | Dotfiles DotfilesP
   deriving (Show, Generic)
 
 instance ToJSON Property where
@@ -81,9 +85,10 @@ instance FromJSON Property where
                                                 }
 
 data Configuration = Configuration
-  { dotfilesRepoUrl :: Text
-  , dotfilesRepoOrigin :: Text
-  , workstationName :: Text
+  { configDir :: Text
+  , configRepoUrl :: Text
+  , configRepoOrigin :: Text
+  , configRepoBranch :: Text
   , properties :: [Property]
   }
   deriving (Generic, Show, FromJSON)
@@ -219,6 +224,45 @@ instance Prop GitTrackHomeDirP where
 
   dependencies _ = return [IsProp HasGitP]
 
+data DotfileConfig = DotfileConfig
+  { src :: Text
+  , dot :: Bool
+  , symlink :: Bool
+  , dir :: Bool
+  }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+data DotfilesP = DotfilesP { srcDir :: Text, files :: [DotfileConfig] }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+instance Prop DotfilesP where
+  desc _ = "dotfiles management"
+  attrs _ = mempty
+  checker p = do
+    results <- forM p.files $ \f-> do
+      let src = (p.srcDir <> "/" <> f.src)
+      let destPart = (bool "" "." f.dot) <> f.src
+      let dest = "~/" <> destPart
+
+      doesExist <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
+      putStrLn' $ T.pack $ intercalate " " ["file", show src, T.unpack dest, show f, "doesExist?", show doesExist]
+      pure doesExist
+    putStrLn' $ T.pack $ intercalate " " ["results", show results]
+    return $ all (==True) results
+  fixer p = do
+    void $ forM p.files $ \f-> do
+      let src = (p.srcDir <> "/" <> f.src)
+      let destPart = (bool "" "." f.dot) <> f.src
+      let dest = "~/" <> destPart
+
+      doesExist <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
+      unless doesExist $ do
+        -- TODO add quotation to strings
+        void $ cmd (exe "bash" "-x" "-c" (intercalate " " ["ln -s", T.unpack src, T.unpack dest]) &!> StdOut)
+    pure ()
+
+  dependencies _ = return []
+
 data BasicSetupP = BasicSetupP
  deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
@@ -329,9 +373,34 @@ instance Prop AptUpdateP where
      Left err -> putStrLn' $ "Failed to update apt: " <> tshow err
   dependencies _ = return []
 
+data WSConfigDirP = WSConfigDirP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+
+instance Prop WSConfigDirP where
+  desc _ = "wshs configuration directory"
+  attrs _ = mempty
+  checker _ = do
+    cfg <- asks configuration
+    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d ", T.unpack $ cfg.configDir])
+  fixer _ = do
+    cfg <- asks configuration
+    let cloneCmd =
+          intercalate " "
+            [ "git clone"
+            , "--branch"
+            , T.unpack cfg.configRepoBranch
+            , T.unpack cfg.configRepoUrl
+            , T.unpack cfg.configDir
+            ]
+    result <- cmd (exe "bash" "-c" $ cloneCmd)
+    case result of
+      Right _ -> putStrLn' $ "Cloned repository to " <> cfg.configDir
+      Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err
+  dependencies _ = return [IsProp HasGitP]
+
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
-getProp (BasicSetup p) = IsProp p
+getProp (Dotfiles p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = Bootstrap
@@ -366,8 +435,7 @@ ensureProperty prop = do
   wsstate <- get
   let
     seen :: Set IsProp
-    seen = wsstate.props --
-
+    seen = wsstate.props
   if Set.member (IsProp prop) seen
     then return ()
     else do
@@ -400,4 +468,5 @@ main = do
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
         ensureProperty (IsProp BasicSetupP)
+        ensureProperty (IsProp WSConfigDirP)
         forM_ (getProp <$> cfg.properties) ensureProperty

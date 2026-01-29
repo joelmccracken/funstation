@@ -75,7 +75,9 @@ library
         text,
         optparse-applicative,
         shh,
+        shelly,
         mtl,
+        path,
         containers
 
     -- Directories containing source files.
