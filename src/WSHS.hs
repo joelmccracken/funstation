@@ -29,17 +29,18 @@ import Data.Either (isRight)
 import Data.Maybe (isJust)
 import GHC.Stack
 import Data.List (intercalate)
-import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (&!>), Stream(StdOut) )
+import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure)
 import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Bool (bool)
-import Control.Monad (void, forM_, forM, unless)
+import Control.Monad (void, forM_, forM, unless, when)
 import Control.Monad.IO.Class
 --import WSHS.Types
 -- import WSHS.Types.Configuration
 import Control.Monad.State
 import Control.Monad.Reader
+import Data.Time.Clock.POSIX (getPOSIXTime)
 -- import WSHS.Commands qualified as Cmd
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -127,7 +128,7 @@ putStrLn' t = liftIO $ putStrLn $ T.unpack t
 tshow :: Show s => s -> Text
 tshow = T.pack . show
 
-cmd :: Proc a -> WS (Either Failure a)
+cmd :: MonadIO m => Proc a -> m (Either Failure a)
 cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
 detectOS :: WS OS
@@ -154,6 +155,15 @@ which cmdName = do
 
 hasCmd' :: Text -> WS Bool
 hasCmd' cmdName = isJust <$> which cmdName
+
+mvToBackup :: Text -> WS ()
+mvToBackup path = do
+  timestamp <- liftIO $ round <$> getPOSIXTime
+  let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
+  result <- cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
+  case result of
+    Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
+    Left err -> error $ "Failed to move file: " <> show err
 
 class Prop p where
   desc :: p -> Text
@@ -227,38 +237,115 @@ instance Prop GitTrackHomeDirP where
 data DotfileConfig = DotfileConfig
   { src :: Text
   , dot :: Bool
-  , symlink :: Bool
+  , sort :: DotfileSort
   , dir :: Bool
   }
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
-data DotfilesP = DotfilesP { srcDir :: Text, files :: [DotfileConfig] }
+data DotfileSort
+  = Symlink
+  | Copy
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+
+data DotfilesP = DotfilesP
+  { srcDir :: Text
+  , destDir :: Maybe Text  -- ^ Destination base directory, defaults to "~/" if Nothing
+  , files :: [DotfileConfig]
+  }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+-- | Get the destination base directory, defaulting to "~/" if not set
+getDestDir :: DotfilesP -> Text
+getDestDir p = maybe "~/" ensureTrailingSlash p.destDir
+  where
+    ensureTrailingSlash t = if T.isSuffixOf "/" t then t else t <> "/"
+
+-- | Compute the full destination path for a dotfile config.
+-- If the dest part is an absolute path (starts with /), use it directly.
+-- Otherwise, prepend the base destination directory.
+computeDestPath :: Text -> DotfileConfig -> Text
+computeDestPath baseDestDir f =
+  let destPart = (bool "" "." f.dot) <> f.src
+  in if T.isPrefixOf "/" destPart
+     then destPart
+     else baseDestDir <> destPart
+
+-- | Check if a single dotfile is in the correct state
+checkSingleDotfile :: MonadIO m => DotfileConfig -> Text -> Text -> m Bool
+checkSingleDotfile f src dest = do
+  case f.sort of
+    Symlink -> do
+      -- Check if dest is a symlink pointing to src
+      target <- cmd (exe "readlink" (T.unpack dest) |> captureTrim)
+      pure $ either (const False) (\t -> TL.toStrict (TL.decodeUtf8 t) == src) target
+    Copy -> do
+      -- Ensure dest is not a symlink, and contents match
+      isSymlink <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -L ", T.unpack dest])
+      if isSymlink
+        then pure False  -- Wrong type: should be regular file, not symlink
+        else do
+          diffResult <- cmd (exe "diff" "-rq" (T.unpack src) (T.unpack dest) &> devNull)
+          pure $ isRight diffResult
 
 instance Prop DotfilesP where
   desc _ = "dotfiles management"
   attrs _ = mempty
   checker p = do
-    results <- forM p.files $ \f-> do
-      let src = (p.srcDir <> "/" <> f.src)
-      let destPart = (bool "" "." f.dot) <> f.src
-      let dest = "~/" <> destPart
+    let baseDestDir = getDestDir p
+    results <- forM p.files $ \f -> do
+      let src = p.srcDir <> "/" <> f.src
+      let dest = computeDestPath baseDestDir f
 
-      doesExist <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
-      putStrLn' $ T.pack $ intercalate " " ["file", show src, T.unpack dest, show f, "doesExist?", show doesExist]
-      pure doesExist
+      -- Verify source exists
+      srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
+      unless srcExists $
+        error $ "Source file does not exist: " <> T.unpack src
+
+      result <- checkSingleDotfile f src dest
+      putStrLn' $ T.pack $ intercalate " " ["file", show src, T.unpack dest, show f, "correct?", show result]
+      pure result
     putStrLn' $ T.pack $ intercalate " " ["results", show results]
-    return $ all (==True) results
+    return $ all (== True) results
   fixer p = do
-    void $ forM p.files $ \f-> do
-      let src = (p.srcDir <> "/" <> f.src)
-      let destPart = (bool "" "." f.dot) <> f.src
-      let dest = "~/" <> destPart
+    let baseDestDir = getDestDir p
+    void $ forM p.files $ \f -> do
+      let src = p.srcDir <> "/" <> f.src
+      let dest = computeDestPath baseDestDir f
 
-      doesExist <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
-      unless doesExist $ do
-        -- TODO add quotation to strings
-        void $ cmd (exe "bash" "-x" "-c" (intercalate " " ["ln -s", T.unpack src, T.unpack dest]) &!> StdOut)
+      -- Verify source exists
+      srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
+      unless srcExists $
+        error $ "Source file does not exist: " <> T.unpack src
+
+      -- Check for broken symlink (test -L succeeds but test -e fails)
+      isBrokenSymlink <- do
+        isLink <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -L ", T.unpack dest])
+        exists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
+        pure (isLink && not exists)
+
+      when isBrokenSymlink $ do
+        putStrLn' $ "Removing broken symlink: " <> dest
+        void $ cmd (exe "rm" (T.unpack dest))
+
+      -- Check if dest exists (after removing broken symlink)
+      destExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
+
+      when destExists $ do
+        -- Check if it's correct; if not, back it up
+        isCorrect <- checkSingleDotfile f src dest
+        unless isCorrect $ do
+          putStrLn' $ "Backing up existing file: " <> dest
+          mvToBackup dest
+
+      -- Create symlink or copy
+      case f.sort of
+        Symlink -> do
+          putStrLn' $ "Creating symlink: " <> dest <> " -> " <> src
+          void $ cmd (exe "ln" "-s" (T.unpack src) (T.unpack dest))
+        Copy -> do
+          putStrLn' $ "Copying: " <> src <> " -> " <> dest
+          void $ cmd (exe "cp" "-r" (T.unpack src) (T.unpack dest))
     pure ()
 
   dependencies _ = return []

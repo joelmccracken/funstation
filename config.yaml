@@ -14,13 +14,14 @@ properties:
       files:
         - src: bashrc
           dot: true
-          symlink: true
+          sort: Symlink
           dir: false
         - src: config/git
           dot: true
-          symlink: true
+          sort: Symlink
           dir: true
-
+        - { src: "config/doom", dot: true, sort: "Symlink", dir: true }
+        - { src: "config/doom", dot: true, sort: "Symlink", dir: true }
   # - type: Dotfiles
   #   params:
   #   src-dir: dotfiles/

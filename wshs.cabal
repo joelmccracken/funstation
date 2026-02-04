@@ -78,6 +78,7 @@ library
         shelly,
         mtl,
         path,
+        time,
         containers
 
     -- Directories containing source files.
@@ -141,5 +142,11 @@ test-suite wshs-test
         text,
         yaml,
         aeson,
+        directory,
+        filepath,
+        temporary,
+        mtl,
+        containers,
+        unix,
 
         wshs
