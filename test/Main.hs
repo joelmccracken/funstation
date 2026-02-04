@@ -82,6 +82,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Symlink
               , dir = False
@@ -99,6 +100,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Symlink
               , dir = False
@@ -113,6 +115,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Symlink
               , dir = False
@@ -128,6 +131,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Copy
               , dir = False
@@ -143,6 +147,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Copy
               , dir = False
@@ -158,6 +163,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Copy
               , dir = False
@@ -173,6 +179,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "subdir"
+              , dest = Nothing
               , dot = False
               , sort = Copy
               , dir = True
@@ -189,6 +196,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "subdir"
+              , dest = Nothing
               , dot = False
               , sort = Copy
               , dir = True
@@ -211,8 +219,8 @@ main = hspec $ do
               { srcDir = T.pack srcPath
               , destDir = Just (T.pack destPath)
               , files =
-                  [ DotfileConfig { src = "file1", dot = False, sort = Symlink, dir = False }
-                  , DotfileConfig { src = "file2", dot = False, sort = Copy, dir = False }
+                  [ DotfileConfig { src = "file1", dest = Nothing, dot = False, sort = Symlink, dir = False }
+                  , DotfileConfig { src = "file2", dest = Nothing, dot = False, sort = Copy, dir = False }
                   ]
               }
         result <- runWS $ checker dotfilesP
@@ -228,11 +236,93 @@ main = hspec $ do
               { srcDir = T.pack srcPath
               , destDir = Just (T.pack destPath)
               , files =
-                  [ DotfileConfig { src = "file1", dot = False, sort = Copy, dir = False }
+                  [ DotfileConfig { src = "file1", dest = Nothing, dot = False, sort = Copy, dir = False }
                   ]
               }
         result <- runWS $ checker dotfilesP
         result `shouldBe` False
+
+    describe "dest field handling" $ do
+      it "uses absolute dest path directly without prepending destDir" $ withTempSrcAndDest $ \srcPath destPath -> do
+        let srcFile = srcPath </> "file1"
+        let destFile = destPath </> "absolute-dest"
+        createTestFile srcFile "content"
+        createTestFile destFile "content"
+
+        let dotfilesP = DotfilesP
+              { srcDir = T.pack srcPath
+              , destDir = Just "/some/other/path/"  -- Should be ignored for absolute dest
+              , files =
+                  [ DotfileConfig
+                      { src = "file1"
+                      , dest = Just (T.pack destFile)  -- Absolute path
+                      , dot = False
+                      , sort = Copy
+                      , dir = False
+                      }
+                  ]
+              }
+        result <- runWS $ checker dotfilesP
+        result `shouldBe` True
+
+      it "prepends destDir to relative dest path" $ withTempSrcAndDest $ \srcPath destPath -> do
+        let srcFile = srcPath </> "file1"
+        let destFile = destPath </> "custom-name"
+        createTestFile srcFile "content"
+        createTestFile destFile "content"
+
+        let dotfilesP = DotfilesP
+              { srcDir = T.pack srcPath
+              , destDir = Just (T.pack destPath)
+              , files =
+                  [ DotfileConfig
+                      { src = "file1"
+                      , dest = Just "custom-name"  -- Relative path
+                      , dot = False
+                      , sort = Copy
+                      , dir = False
+                      }
+                  ]
+              }
+        result <- runWS $ checker dotfilesP
+        result `shouldBe` True
+
+      it "ignores dot prefix when dest is explicit" $ withTempSrcAndDest $ \srcPath destPath -> do
+        let srcFile = srcPath </> "file1"
+        let destFile = destPath </> "custom-name"  -- No dot prefix
+        createTestFile srcFile "content"
+        createTestFile destFile "content"
+
+        let dotfilesP = DotfilesP
+              { srcDir = T.pack srcPath
+              , destDir = Just (T.pack destPath)
+              , files =
+                  [ DotfileConfig
+                      { src = "file1"
+                      , dest = Just "custom-name"
+                      , dot = True  -- Should be ignored when dest is set
+                      , sort = Copy
+                      , dir = False
+                      }
+                  ]
+              }
+        result <- runWS $ checker dotfilesP
+        result `shouldBe` True
+
+    describe "expandPath" $ do
+      it "expands tilde to home directory" $ do
+        result <- expandPath "~"
+        result `shouldSatisfy` T.isPrefixOf "/"
+        result `shouldSatisfy` (not . T.isInfixOf "~")
+
+      it "expands tilde in path" $ do
+        result <- expandPath "~/foo/bar"
+        result `shouldSatisfy` T.isPrefixOf "/"
+        result `shouldSatisfy` T.isSuffixOf "/foo/bar"
+
+      it "leaves absolute paths unchanged" $ do
+        result <- expandPath "/usr/local/bin"
+        result `shouldBe` "/usr/local/bin"
 
     describe "broken symlink handling" $ do
       it "detects broken symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -256,6 +346,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Copy
               , dir = False
@@ -271,6 +362,7 @@ main = hspec $ do
 
         let cfg = DotfileConfig
               { src = "testfile"
+              , dest = Nothing
               , dot = False
               , sort = Symlink
               , dir = False

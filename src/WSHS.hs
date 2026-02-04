@@ -156,6 +156,12 @@ which cmdName = do
 hasCmd' :: Text -> WS Bool
 hasCmd' cmdName = isJust <$> which cmdName
 
+-- | Expand a path using bash filename expansion (resolves ~, $HOME, etc.)
+expandPath :: MonadIO m => Text -> m Text
+expandPath path = do
+  result <- cmd (exe "bash" "-c" ("echo " <> T.unpack path) |> captureTrim)
+  pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
+
 mvToBackup :: Text -> WS ()
 mvToBackup path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
@@ -236,6 +242,7 @@ instance Prop GitTrackHomeDirP where
 
 data DotfileConfig = DotfileConfig
   { src :: Text
+  , dest :: Maybe Text  -- ^ Optional destination path; if absolute, used directly
   , dot :: Bool
   , sort :: DotfileSort
   , dir :: Bool
@@ -262,14 +269,15 @@ getDestDir p = maybe "~/" ensureTrailingSlash p.destDir
     ensureTrailingSlash t = if T.isSuffixOf "/" t then t else t <> "/"
 
 -- | Compute the full destination path for a dotfile config.
--- If the dest part is an absolute path (starts with /), use it directly.
--- Otherwise, prepend the base destination directory.
+-- If dest is set and is an absolute path (starts with /), use it directly.
+-- If dest is set but relative, prepend baseDestDir (dot prefix is ignored).
+-- If dest is not set, derive from src with optional dot prefix.
 computeDestPath :: Text -> DotfileConfig -> Text
 computeDestPath baseDestDir f =
-  let destPart = (bool "" "." f.dot) <> f.src
-  in if T.isPrefixOf "/" destPart
-     then destPart
-     else baseDestDir <> destPart
+  case f.dest of
+    Just d | T.isPrefixOf "/" d -> d
+    Just d -> baseDestDir <> d  -- dot prefix ignored when dest is explicit
+    Nothing -> baseDestDir <> (bool "" "." f.dot) <> f.src
 
 -- | Check if a single dotfile is in the correct state
 checkSingleDotfile :: MonadIO m => DotfileConfig -> Text -> Text -> m Bool
@@ -294,24 +302,21 @@ instance Prop DotfilesP where
   checker p = do
     let baseDestDir = getDestDir p
     results <- forM p.files $ \f -> do
-      let src = p.srcDir <> "/" <> f.src
-      let dest = computeDestPath baseDestDir f
+      src <- expandPath $ p.srcDir <> "/" <> f.src
+      dest <- expandPath $ computeDestPath baseDestDir f
 
       -- Verify source exists
       srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
       unless srcExists $
         error $ "Source file does not exist: " <> T.unpack src
-
       result <- checkSingleDotfile f src dest
-      putStrLn' $ T.pack $ intercalate " " ["file", show src, T.unpack dest, show f, "correct?", show result]
       pure result
-    putStrLn' $ T.pack $ intercalate " " ["results", show results]
     return $ all (== True) results
   fixer p = do
     let baseDestDir = getDestDir p
     void $ forM p.files $ \f -> do
-      let src = p.srcDir <> "/" <> f.src
-      let dest = computeDestPath baseDestDir f
+      src <- expandPath $ p.srcDir <> "/" <> f.src
+      dest <- expandPath $ computeDestPath baseDestDir f
 
       -- Verify source exists
       srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
@@ -508,6 +513,7 @@ commandParser = subparser
 
 optionsParser :: Parser Options
 optionsParser = Options <$> commandParser
+
 
 parseOptions :: IO Options
 parseOptions =
