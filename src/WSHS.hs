@@ -436,10 +436,23 @@ instance Prop XCodeCLIToolsP where
   attrs _ = mempty
   checker _ = isRight <$> cmd (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables" &> devNull)
   fixer _ = do
-      result <- cmd (exe "sudo" "bash" "-c" "(xcodebuild -license accept; xcode-select --install) || exit 0"  &> devNull)
+      putStrLn' "Installing Xcode CLI Tools..."
+
+      -- Create marker file that triggers CLT in softwareupdate list
+      void $ cmd (exe "touch" "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress")
+
+      -- Find and install the CLT package
+      let findAndInstall = "softwareupdate -i \"$(softwareupdate -l 2>&1 | grep -o 'Command Line Tools for Xcode-[0-9.]*' | head -1)\""
+      result <- cmd (exe "bash" "-c" findAndInstall)
+
+      -- Clean up marker
+      void $ cmd (exe "rm" "-f" "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress")
+
       case result of
-        Right _ -> putStrLn' "Xcode CLI tools installed successfully"
-        Left err -> putStrLn' $ "Failed to install Xcode CLI tools: " <> tshow err
+        Left err -> error $ "Failed to install Xcode CLI tools: " <> show err
+        Right _ -> do
+          putStrLn' "Xcode CLI tools installed successfully"
+
   dependencies _ = return []
 
 data HomebrewP = HomebrewP
@@ -450,7 +463,7 @@ instance Prop HomebrewP where
   attrs _ = mempty
   checker _ = hasCmd' "brew"
   fixer _ = do
-    result <- cmd (exe "sudo" "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  &> devNull)
+    result <- cmd (exe "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  &> devNull)
     case result of
       Right _ -> putStrLn' "Homebrew installed successfully"
       Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
