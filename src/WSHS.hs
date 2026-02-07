@@ -26,7 +26,7 @@ import Data.Text qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe)
 import GHC.Stack
 import Data.List (intercalate)
 import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure)
@@ -67,6 +67,7 @@ data Settings = Settings
 data Property
   = GitHomeDir GitTrackHomeDirP
   | Dotfiles DotfilesP
+  | NixDaemon NixDaemonP
   deriving (Show, Generic)
 
 instance ToJSON Property where
@@ -317,6 +318,10 @@ instance Prop DotfilesP where
     void $ forM p.files $ \f -> do
       src <- expandPath $ p.srcDir <> "/" <> f.src
       dest <- expandPath $ computeDestPath baseDestDir f
+      -- TODO DRY a lot of this - duplicate logic between check, fixer
+      -- a sort of "what needs to happen for this dotfile" type could be totally reused;
+      -- "it needs anything at all" == checker fails, use case on result for fixer to
+      -- do the needful
 
       -- Verify source exists
       srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
@@ -490,9 +495,75 @@ instance Prop WSConfigDirP where
       Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err
   dependencies _ = return [IsProp HasGitP]
 
+-- | Restart the Nix daemon (OS-aware)
+restartNixDaemon :: WS ()
+restartNixDaemon = do
+  os <- detectOS
+  case os of
+    MacOS -> do
+      putStrLn' "Restarting Nix daemon (macOS)..."
+      void $ cmd (exe "sudo" "launchctl" "unload" "/Library/LaunchDaemons/org.nixos.nix-daemon.plist")
+      void $ cmd (exe "sudo" "launchctl" "load" "/Library/LaunchDaemons/org.nixos.nix-daemon.plist")
+    Debian -> do
+      putStrLn' "Restarting Nix daemon (Debian)..."
+      void $ cmd (exe "sudo" "systemctl" "restart" "nix-daemon.service")
+    Unknown -> error "Cannot restart nix daemon: unknown OS"
+
+data NixDaemonP = NixDaemonP
+  { version :: Maybe Text      -- ^ Nix version to install, defaults to "2.24.14"
+  , interactive :: Bool        -- ^ If True, allow user to answer installer prompts; if False, pass --yes
+  }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+defaultNixVersion :: Text
+defaultNixVersion = "2.24.14"
+
+nixDaemonProfile :: FilePath
+nixDaemonProfile = "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+
+instance Prop NixDaemonP where
+  desc _ = "Nix package manager (daemon mode)"
+  attrs p = Map.fromList
+    [ ("version", fromMaybe defaultNixVersion p.version)
+    , ("interactive", tshow p.interactive)
+    ]
+  checker _ = hasCmd' "nix"
+  fixer p = do
+    let ver = fromMaybe defaultNixVersion p.version
+    let installerUrl = "https://releases.nixos.org/nix/nix-" <> ver <> "/install"
+    let yesFlag = if p.interactive then "" else " --yes"
+
+    putStrLn' $ "Installing Nix " <> ver <> "..."
+
+    -- Download and run installer
+    let installCmd = "curl -L " <> T.unpack installerUrl <> " | sh -s -- --daemon" <> T.unpack yesFlag
+    result <- cmd (exe "bash" "-c" installCmd)
+    case result of
+      Left err -> error $ "Nix installation failed: " <> show err
+      Right _ -> pure ()
+
+    -- Verify profile exists
+    profileExists <- isRight <$> cmd (exe "test" "-e" nixDaemonProfile)
+    unless profileExists $
+      error $ "Nix installed, but cannot find profile file: " <> nixDaemonProfile
+
+    -- Print message for user
+    putStrLn' ""
+    putStrLn' "Nix installed. Add the following to your shell profile:"
+    putStrLn' $ "  . " <> T.pack nixDaemonProfile
+    putStrLn' ""
+
+    -- Restart daemon
+    restartNixDaemon
+
+    putStrLn' "Nix daemon installation complete."
+
+  dependencies _ = return []
+
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
 getProp (Dotfiles p) = IsProp p
+getProp (NixDaemon p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = Bootstrap
