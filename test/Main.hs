@@ -369,3 +369,296 @@ main = hspec $ do
               }
         result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
+
+    describe "computeDotfileDiff" $ do
+      it "returns DotfileCorrect for correct symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createSymbolicLink srcFile destFile
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileCorrect
+
+      it "returns DotfileCorrect for correct copy" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createTestFile destFile "content"
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Copy
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileCorrect
+
+      it "returns DotfileMissing when destination doesn't exist" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileMissing
+
+      it "returns DotfileBrokenSymlink for broken symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let oldTarget = srcDir </> "oldtarget"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createTestFile oldTarget "old content"
+        createSymbolicLink oldTarget destFile
+        removeFile oldTarget  -- Break the symlink
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileBrokenSymlink
+
+      it "returns DotfileWrong for symlink pointing to wrong target" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let wrongFile = srcDir </> "wrongfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createTestFile wrongFile "wrong content"
+        createSymbolicLink wrongFile destFile
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileWrong
+
+      it "returns DotfileWrong for copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createTestFile destFile "different content"
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Copy
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileWrong
+
+      it "returns DotfileWrong for symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createSymbolicLink srcFile destFile
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Copy
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileWrong
+
+      it "returns DotfileSrcMissing when source doesn't exist" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "nonexistent"
+        let destFile = destDir </> "testfile"
+
+        let cfg = DotfileConfig
+              { src = "nonexistent"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result `shouldBe` DotfileSrcMissing (T.pack srcFile)
+
+    describe "computeDotfilePaths" $ do
+      it "computes correct paths with default destDir" $ do
+        let dotfilesP = DotfilesP
+              { srcDir = "/home/user/dotfiles"
+              , destDir = Nothing  -- defaults to "~/"
+              , files = []
+              }
+        let cfg = DotfileConfig
+              { src = "vimrc"
+              , dest = Nothing
+              , dot = True
+              , sort = Symlink
+              , dir = False
+              }
+        (src, dest) <- runWS $ computeDotfilePaths dotfilesP cfg
+        src `shouldBe` "/home/user/dotfiles/vimrc"
+        -- dest will have ~ expanded, so just check it ends correctly
+        dest `shouldSatisfy` T.isSuffixOf ".vimrc"
+
+      it "computes correct paths with explicit destDir" $ do
+        let dotfilesP = DotfilesP
+              { srcDir = "/home/user/dotfiles"
+              , destDir = Just "/home/user/"
+              , files = []
+              }
+        let cfg = DotfileConfig
+              { src = "bashrc"
+              , dest = Nothing
+              , dot = True
+              , sort = Symlink
+              , dir = False
+              }
+        (src, dest) <- runWS $ computeDotfilePaths dotfilesP cfg
+        src `shouldBe` "/home/user/dotfiles/bashrc"
+        dest `shouldBe` "/home/user/.bashrc"
+
+      it "computes correct paths with explicit dest" $ do
+        let dotfilesP = DotfilesP
+              { srcDir = "/home/user/dotfiles"
+              , destDir = Just "/home/user/"
+              , files = []
+              }
+        let cfg = DotfileConfig
+              { src = "vim"
+              , dest = Just "custom-vim"
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        (src, dest) <- runWS $ computeDotfilePaths dotfilesP cfg
+        src `shouldBe` "/home/user/dotfiles/vim"
+        dest `shouldBe` "/home/user/custom-vim"
+
+      it "uses absolute dest path directly" $ do
+        let dotfilesP = DotfilesP
+              { srcDir = "/home/user/dotfiles"
+              , destDir = Just "/home/user/"
+              , files = []
+              }
+        let cfg = DotfileConfig
+              { src = "gitconfig"
+              , dest = Just "/etc/gitconfig"
+              , dot = False
+              , sort = Copy
+              , dir = False
+              }
+        (src, dest) <- runWS $ computeDotfilePaths dotfilesP cfg
+        src `shouldBe` "/home/user/dotfiles/gitconfig"
+        dest `shouldBe` "/etc/gitconfig"
+
+    describe "applyDotfileFix" $ do
+      it "creates symlink for DotfileMissing" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileMissing
+
+        exists <- doesPathExist destFile
+        exists `shouldBe` True
+        isLink <- pathIsSymbolicLink destFile
+        isLink `shouldBe` True
+
+      it "creates copy for DotfileMissing with Copy mode" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Copy
+              , dir = False
+              }
+        runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileMissing
+
+        exists <- doesPathExist destFile
+        exists `shouldBe` True
+        isLink <- pathIsSymbolicLink destFile
+        isLink `shouldBe` False
+        content <- readFile destFile
+        content `shouldBe` "content"
+
+      it "removes broken symlink and creates new one for DotfileBrokenSymlink" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let oldTarget = srcDir </> "oldtarget"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "content"
+        createTestFile oldTarget "old"
+        createSymbolicLink oldTarget destFile
+        removeFile oldTarget  -- Break the symlink
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileBrokenSymlink
+
+        exists <- doesPathExist destFile
+        exists `shouldBe` True
+        isLink <- pathIsSymbolicLink destFile
+        isLink `shouldBe` True
+        -- Verify it points to the right target now
+        diffResult <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        diffResult `shouldBe` DotfileCorrect
+
+      it "backs up wrong file and creates new one for DotfileWrong" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        let destFile = destDir </> "testfile"
+        createTestFile srcFile "correct content"
+        createTestFile destFile "wrong content"
+
+        let cfg = DotfileConfig
+              { src = "testfile"
+              , dest = Nothing
+              , dot = False
+              , sort = Symlink
+              , dir = False
+              }
+        runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileWrong
+
+        -- Original dest should now be correct
+        exists <- doesPathExist destFile
+        exists `shouldBe` True
+        isLink <- pathIsSymbolicLink destFile
+        isLink `shouldBe` True
+
+        -- A backup file should exist
+        backupFiles <- listDirectory destDir
+        length backupFiles `shouldSatisfy` (> 1)  -- testfile + backup

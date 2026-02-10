@@ -34,7 +34,7 @@ import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Bool (bool)
-import Control.Monad (void, forM_, forM, unless, when)
+import Control.Monad (void, forM_, forM, unless)
 import Control.Monad.IO.Class
 --import WSHS.Types
 -- import WSHS.Types.Configuration
@@ -255,6 +255,41 @@ data DotfileSort
   | Copy
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
+-- | Describes the difference between desired and current filesystem state for a dotfile
+data DotfileDiff
+  = DotfileCorrect              -- ^ Already in the desired state, no action needed
+  | DotfileMissing              -- ^ Destination doesn't exist, needs to be created
+  | DotfileBrokenSymlink        -- ^ Destination is a broken symlink, needs removal and recreation
+  | DotfileWrong                -- ^ Destination exists but has wrong content/type, needs backup and recreation
+  | DotfileSrcMissing Text      -- ^ Error: source file doesn't exist (carries the missing path)
+  deriving (Eq, Show)
+
+-- | Compute the filesystem diff for a single dotfile.
+-- This determines what action (if any) is needed to bring the dotfile to the desired state.
+computeDotfileDiff :: MonadIO m => DotfileConfig -> Text -> Text -> m DotfileDiff
+computeDotfileDiff f src dest = do
+  -- Check if source exists
+  srcExists <- isRight <$> cmd (exe "bash" "-c" $ "test -e " <> T.unpack src)
+  if not srcExists
+    then pure $ DotfileSrcMissing src
+    else do
+      -- Check if dest is a symlink (regardless of whether target exists)
+      isLink <- isRight <$> cmd (exe "bash" "-c" $ "test -L " <> T.unpack dest)
+      -- Check if dest exists (follows symlinks, so broken symlink = False)
+      destExists <- isRight <$> cmd (exe "bash" "-c" $ "test -e " <> T.unpack dest)
+
+      case (isLink, destExists) of
+        (True, False) ->
+          -- Symlink exists but target doesn't = broken symlink
+          pure DotfileBrokenSymlink
+        (_, False) ->
+          -- No dest at all
+          pure DotfileMissing
+        _ -> do
+          -- Dest exists, check if it's correct
+          isCorrect <- checkSingleDotfile f src dest
+          pure $ if isCorrect then DotfileCorrect else DotfileWrong
+
 
 data DotfilesP = DotfilesP
   { srcDir :: Text
@@ -297,66 +332,58 @@ checkSingleDotfile f src dest = do
           diffResult <- cmd (exe "diff" "-rq" (T.unpack src) (T.unpack dest) &> devNull)
           pure $ isRight diffResult
 
+-- | Compute expanded src and dest paths for a dotfile config
+computeDotfilePaths :: MonadIO m => DotfilesP -> DotfileConfig -> m (Text, Text)
+computeDotfilePaths p f = do
+  let baseDestDir = getDestDir p
+  src <- expandPath $ p.srcDir <> "/" <> f.src
+  dest <- expandPath $ computeDestPath baseDestDir f
+  pure (src, dest)
+
+-- | Apply the fix for a dotfile based on its diff state.
+-- Assumes the diff is not DotfileCorrect or DotfileSrcMissing (caller should handle those).
+applyDotfileFix :: DotfileConfig -> Text -> Text -> DotfileDiff -> WS ()
+applyDotfileFix f src dest diff = do
+  -- Handle any necessary cleanup/backup based on the diff
+  case diff of
+    DotfileBrokenSymlink -> do
+      putStrLn' $ "Removing broken symlink: " <> dest
+      void $ cmd (exe "rm" (T.unpack dest))
+    DotfileWrong -> do
+      putStrLn' $ "Backing up existing file: " <> dest
+      mvToBackup dest
+    _ -> pure ()
+
+  -- Create the dotfile (symlink or copy)
+  case f.sort of
+    Symlink -> do
+      putStrLn' $ "Creating symlink: " <> dest <> " -> " <> src
+      void $ cmd (exe "ln" "-s" (T.unpack src) (T.unpack dest))
+    Copy -> do
+      putStrLn' $ "Copying: " <> src <> " -> " <> dest
+      void $ cmd (exe "cp" "-r" (T.unpack src) (T.unpack dest))
+
 instance Prop DotfilesP where
   desc _ = "dotfiles management"
   attrs _ = mempty
   checker p = do
-    let baseDestDir = getDestDir p
     results <- forM p.files $ \f -> do
-      src <- expandPath $ p.srcDir <> "/" <> f.src
-      dest <- expandPath $ computeDestPath baseDestDir f
+      (src, dest) <- computeDotfilePaths p f
+      diff <- computeDotfileDiff f src dest
+      case diff of
+        DotfileSrcMissing path -> error $ "Source file does not exist: " <> T.unpack path
+        DotfileCorrect -> pure True
+        _ -> pure False
+    return $ all id results
 
-      -- Verify source exists
-      srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
-      unless srcExists $
-        error $ "Source file does not exist: " <> T.unpack src
-      result <- checkSingleDotfile f src dest
-      pure result
-    return $ all (== True) results
   fixer p = do
-    let baseDestDir = getDestDir p
-    void $ forM p.files $ \f -> do
-      src <- expandPath $ p.srcDir <> "/" <> f.src
-      dest <- expandPath $ computeDestPath baseDestDir f
-      -- TODO DRY a lot of this - duplicate logic between check, fixer
-      -- a sort of "what needs to happen for this dotfile" type could be totally reused;
-      -- "it needs anything at all" == checker fails, use case on result for fixer to
-      -- do the needful
-
-      -- Verify source exists
-      srcExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack src])
-      unless srcExists $
-        error $ "Source file does not exist: " <> T.unpack src
-
-      -- Check for broken symlink (test -L succeeds but test -e fails)
-      isBrokenSymlink <- do
-        isLink <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -L ", T.unpack dest])
-        exists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
-        pure (isLink && not exists)
-
-      when isBrokenSymlink $ do
-        putStrLn' $ "Removing broken symlink: " <> dest
-        void $ cmd (exe "rm" (T.unpack dest))
-
-      -- Check if dest exists (after removing broken symlink)
-      destExists <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -e ", T.unpack dest])
-
-      when destExists $ do
-        -- Check if it's correct; if not, back it up
-        isCorrect <- checkSingleDotfile f src dest
-        unless isCorrect $ do
-          putStrLn' $ "Backing up existing file: " <> dest
-          mvToBackup dest
-
-      -- Create symlink or copy
-      case f.sort of
-        Symlink -> do
-          putStrLn' $ "Creating symlink: " <> dest <> " -> " <> src
-          void $ cmd (exe "ln" "-s" (T.unpack src) (T.unpack dest))
-        Copy -> do
-          putStrLn' $ "Copying: " <> src <> " -> " <> dest
-          void $ cmd (exe "cp" "-r" (T.unpack src) (T.unpack dest))
-    pure ()
+    forM_ p.files $ \f -> do
+      (src, dest) <- computeDotfilePaths p f
+      diff <- computeDotfileDiff f src dest
+      case diff of
+        DotfileSrcMissing path -> error $ "Source file does not exist: " <> T.unpack path
+        DotfileCorrect -> pure ()
+        _ -> applyDotfileFix f src dest diff
 
   dependencies _ = return []
 
@@ -468,6 +495,9 @@ instance Prop HomebrewP where
       Right _ -> putStrLn' "Homebrew installed successfully"
       Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
   dependencies _ = return [ (IsProp XCodeCLIToolsP) ]
+
+-- TODO add sudo nopasswd support
+
 
 data AptUpdateP = AptUpdateP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
