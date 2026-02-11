@@ -34,7 +34,8 @@ import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Bool (bool)
-import Control.Monad (void, forM_, forM, unless)
+import Control.Monad (void, forM_, forM, unless, forever)
+import Control.Concurrent (forkIO, threadDelay, ThreadId, killThread)
 import Control.Monad.IO.Class
 --import WSHS.Types
 -- import WSHS.Types.Configuration
@@ -104,6 +105,7 @@ data Command
 
 data Options = Options
   { command :: Command
+  , nopasswd :: Bool  -- ^ If True, cache sudo credentials and refresh in background
   }
   deriving (Show)
 
@@ -626,7 +628,12 @@ commandParser = subparser
   )
 
 optionsParser :: Parser Options
-optionsParser = Options <$> commandParser
+optionsParser = Options
+  <$> commandParser
+  <*> switch
+      ( long "nopasswd"
+     <> help "Cache sudo credentials and refresh in background (prompts once at start)"
+      )
 
 
 parseOptions :: IO Options
@@ -664,9 +671,43 @@ ensureProperty prop = do
 
       put $ wsstate { props = Set.insert (IsProp prop) seen}
 
+-- | Refresh sudo credentials by running @sudo -v@.
+-- Returns True if successful, False otherwise.
+refreshSudo :: IO Bool
+refreshSudo = isRight <$> tryFailure (exe "sudo" "-v")
+
+-- | Start a background thread that refreshes sudo credentials every 60 seconds.
+-- Returns the ThreadId so it can be killed when done.
+startSudoRefreshLoop :: IO ThreadId
+startSudoRefreshLoop = forkIO $ forever $ do
+  threadDelay (60 * 1000000)  -- 60 seconds in microseconds
+  void refreshSudo
+
+-- | Initialize sudo credential caching.
+-- Prompts for password once, then starts background refresh loop.
+-- Returns the ThreadId of the refresh loop, or Nothing if initial auth failed.
+initSudoCache :: IO (Maybe ThreadId)
+initSudoCache = do
+  putStrLn "Initializing sudo credential cache (you may be prompted for your password)..."
+  success <- refreshSudo
+  if success
+    then do
+      putStrLn "Sudo credentials cached. Starting background refresh..."
+      tid <- startSudoRefreshLoop
+      pure (Just tid)
+    else do
+      putStrLn "Warning: Failed to cache sudo credentials. Continuing without nopasswd mode."
+      pure Nothing
+
 main :: IO ()
 main = do
   opts <- parseOptions
+
+  -- Initialize sudo caching if requested
+  sudoThread <- if opts.nopasswd
+    then initSudoCache
+    else pure Nothing
+
   case opts.command of
     Bootstrap cfgPath ws -> do
       cfg <- decodeFileThrow cfgPath :: IO Configuration
@@ -677,3 +718,8 @@ main = do
         ensureProperty (IsProp BasicSetupP)
         ensureProperty (IsProp WSConfigDirP)
         forM_ (getProp <$> cfg.properties) ensureProperty
+
+  -- Clean up sudo refresh thread
+  case sudoThread of
+    Just tid -> killThread tid
+    Nothing -> pure ()

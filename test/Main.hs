@@ -27,7 +27,7 @@ import Data.Set qualified as Set
 -- a stable property. Figure that out at some point.
 runWS :: WS a -> IO a
 runWS action = do
-  let opts = Options { command = Bootstrap "" "" }
+  let opts = Options { command = Bootstrap "" "", nopasswd = False }
   let cfg = Configuration
         { configDir = ""
         , configRepoUrl = ""
