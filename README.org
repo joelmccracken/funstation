@@ -56,17 +56,8 @@ lib/properties.bash
 - maybe first run/setup will just need the normal irritation of being prompted
   but can optionally run command before ws sync is run in the future?
 ** TODO capture/record the setup of this vmware fusion vm
-* task description of
+* WIP task descriptions
 #+begin_src md
-  Add support to the NixDaemonP to ensure the `/etc/nix/nix.conf` file is correct.
-
-  - The config for NixDaemonP should have a "system config" parameter.
-    - This should be decoded as raw text, and treated as the desired contents for the nix config file.
-  - do the checking and modification of the nix config after the nix installation is done.
-  - if a change is made to the config file, the nix daemon must be restarted for it to be picked up.
-
-
-
 
 
   support providing sudo password via `-A` and the `SUDO_ASKPASS` env var.
