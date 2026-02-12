@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main (main) where
 
@@ -662,3 +663,106 @@ main = hspec $ do
         -- A backup file should exist
         backupFiles <- listDirectory destDir
         length backupFiles `shouldSatisfy` (> 1)  -- testfile + backup
+
+  describe "fileContentsCheck" $ do
+    let withTempDir fn =
+          withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+
+    it "returns True when file exists with matching contents" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      let content = "test content\nline 2\n"
+      writeFile testFile content
+      result <- runWS $ fileContentsCheck (T.pack testFile) (T.pack content)
+      result `shouldBe` True
+
+    it "returns False when file exists with different contents" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      writeFile testFile "original content"
+      result <- runWS $ fileContentsCheck (T.pack testFile) "different content"
+      result `shouldBe` False
+
+    it "returns False when file does not exist" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "nonexistent"
+      result <- runWS $ fileContentsCheck (T.pack testFile) "some content"
+      result `shouldBe` False
+
+    it "returns True for empty file with empty desired content" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "emptyfile"
+      writeFile testFile ""
+      result <- runWS $ fileContentsCheck (T.pack testFile) ""
+      result `shouldBe` True
+
+    it "returns False for empty file with non-empty desired content" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "emptyfile"
+      writeFile testFile ""
+      result <- runWS $ fileContentsCheck (T.pack testFile) "some content"
+      result `shouldBe` False
+
+    it "handles multiline content correctly" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "multiline"
+      let content = "line 1\nline 2\nline 3\n"
+      writeFile testFile content
+      result <- runWS $ fileContentsCheck (T.pack testFile) (T.pack content)
+      result `shouldBe` True
+
+  describe "fileContentsFix" $ do
+    let withTempDir fn =
+          withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+
+    it "returns Nothing when file already has correct contents" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      let content = "correct content"
+      writeFile testFile content
+      result <- runWS $ fileContentsFix (T.pack testFile) (T.pack content)
+      result `shouldBe` Nothing
+      -- Verify no backup was created
+      files <- listDirectory tmpDir
+      length files `shouldBe` 1
+
+    it "returns Just backupPath when file exists with wrong contents" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      writeFile testFile "original content"
+      result <- runWS $ fileContentsFix (T.pack testFile) "new content"
+      result `shouldSatisfy` \case
+        Just path -> not (T.null path)
+        Nothing -> False
+      -- Verify file was updated
+      newContent <- readFile testFile
+      newContent `shouldBe` "new content"
+      -- Verify backup exists
+      files <- listDirectory tmpDir
+      length files `shouldBe` 2  -- original + backup
+
+    it "returns Just empty string when file does not exist" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "newfile"
+      result <- runWS $ fileContentsFix (T.pack testFile) "new content"
+      result `shouldBe` Just ""
+      -- Verify file was created
+      exists <- doesPathExist testFile
+      exists `shouldBe` True
+      content <- readFile testFile
+      content `shouldBe` "new content"
+
+    it "backup file contains original contents" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      let originalContent = "original content"
+      writeFile testFile originalContent
+      result <- runWS $ fileContentsFix (T.pack testFile) "new content"
+      case result of
+        Just backupPath -> do
+          backupContent <- readFile (T.unpack backupPath)
+          backupContent `shouldBe` originalContent
+        Nothing -> expectationFailure "Expected Just backupPath"
+
+    it "handles multiline content correctly" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "multiline"
+      let originalContent = "line 1\nline 2\n"
+      let newContent = "new line 1\nnew line 2\nnew line 3\n"
+      writeFile testFile originalContent
+      result <- runWS $ fileContentsFix (T.pack testFile) (T.pack newContent)
+      result `shouldSatisfy` \case
+        Just _ -> True
+        Nothing -> False
+      -- Verify new content
+      updatedContent <- readFile testFile
+      updatedContent `shouldBe` newContent

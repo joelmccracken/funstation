@@ -21,6 +21,7 @@ import Options.Applicative qualified as App
 -- import Shelly qualified as S
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 -- import Path qualified
 -- import Path ((</>))
 import Data.Text.Lazy qualified as TL
@@ -34,7 +35,7 @@ import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Bool (bool)
-import Control.Monad (void, forM_, forM, unless, forever)
+import Control.Monad (void, forM_, forM, unless, forever, when)
 import Control.Concurrent (forkIO, threadDelay, ThreadId, killThread)
 import Control.Monad.IO.Class
 --import WSHS.Types
@@ -173,6 +174,81 @@ mvToBackup path = do
   case result of
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
     Left err -> error $ "Failed to move file: " <> show err
+
+-- | Move a file to a timestamped backup using sudo (for /etc files)
+mvToBackupSudo :: Text -> WS Text
+mvToBackupSudo path = do
+  timestamp <- liftIO $ round <$> getPOSIXTime
+  let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
+  result <- cmd (exe "sudo" "mv" (T.unpack path) (T.unpack backupPath))
+  case result of
+    Right _ -> do
+      putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
+      pure backupPath
+    Left err -> error $ "Failed to backup file: " <> show err
+
+-- | Check if a file has the desired contents.
+-- Returns True if the file exists and matches, False otherwise.
+fileContentsCheck :: Text -> Text -> WS Bool
+fileContentsCheck path content = do
+  -- Create temp file with desired content
+  tempFileResult <- cmd (exe "mktemp" |> captureTrim)
+  case tempFileResult of
+    Left err -> error $ "Failed to create temp file: " <> show err
+    Right tempFileBytes -> do
+      let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
+
+      -- Write desired content to temp file
+      liftIO $ TIO.writeFile tempFile content
+
+      -- Check if target file exists
+      targetExists <- isRight <$> cmd (exe "test" "-e" (T.unpack path))
+
+      result <- if not targetExists
+        then pure False  -- Target doesn't exist, needs fixing
+        else do
+          -- Compare using diff (need sudo for /etc files)
+          diffResult <- cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
+          pure $ isRight diffResult
+
+      -- Clean up temp file
+      void $ cmd (exe "rm" "-f" tempFile)
+
+      pure result
+
+-- | Ensure a file has the desired contents.
+-- Returns Nothing if no change was needed, Just backupPath if the file was updated.
+-- The backupPath will be empty string if no backup was needed (file didn't exist).
+fileContentsFix :: Text -> Text -> WS (Maybe Text)
+fileContentsFix path content = do
+  -- First check if file already has correct contents
+  isCorrect <- fileContentsCheck path content
+  if isCorrect
+    then pure Nothing  -- No change needed
+    else do
+      -- Create temp file with desired content
+      tempFileResult <- cmd (exe "mktemp" |> captureTrim)
+      case tempFileResult of
+        Left err -> error $ "Failed to create temp file: " <> show err
+        Right tempFileBytes -> do
+          let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
+
+          -- Write desired content to temp file
+          liftIO $ TIO.writeFile tempFile content
+
+          -- Check if target exists and back it up
+          targetExists <- isRight <$> cmd (exe "test" "-e" (T.unpack path))
+          backupPath <- if targetExists
+            then mvToBackupSudo path
+            else pure ""
+
+          -- Move temp file to target location (requires sudo for /etc)
+          moveResult <- cmd (exe "sudo" "mv" tempFile (T.unpack path))
+          case moveResult of
+            Left err -> error $ "Failed to move file to " <> T.unpack path <> ": " <> show err
+            Right _ -> pure ()
+
+          pure $ Just backupPath
 
 class Prop p where
   desc :: p -> Text
@@ -557,6 +633,7 @@ restartNixDaemon = do
 data NixDaemonP = NixDaemonP
   { version :: Maybe Text      -- ^ Nix version to install, defaults to "2.24.14"
   , interactive :: Bool        -- ^ If True, allow user to answer installer prompts; if False, pass --yes
+  , nixConf :: Maybe Text      -- ^ Desired contents of /etc/nix/nix.conf (optional)
   }
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
@@ -572,36 +649,69 @@ instance Prop NixDaemonP where
     [ ("version", fromMaybe defaultNixVersion p.version)
     , ("interactive", tshow p.interactive)
     ]
-  checker _ = hasCmd' "nix"
+  checker p = do
+    nixInstalled <- hasCmd' "nix"
+    if not nixInstalled
+      then return False
+      else case p.nixConf of
+        Nothing -> return True  -- No config specified, nix installed = good
+        Just desiredConf -> do
+          let nixConfPath = "/etc/nix/nix.conf"
+          fileContentsCheck nixConfPath desiredConf
   fixer p = do
-    let ver = fromMaybe defaultNixVersion p.version
-    let installerUrl = "https://releases.nixos.org/nix/nix-" <> ver <> "/install"
-    let yesFlag = if p.interactive then "" else " --yes"
+    -- Check if Nix is already installed
+    nixInstalled <- hasCmd' "nix"
 
-    putStrLn' $ "Installing Nix " <> ver <> "..."
+    if nixInstalled
+      then putStrLn' "Nix already installed, checking configuration..."
+      else installNix
 
-    -- Download and run installer
-    let installCmd = "curl -L " <> T.unpack installerUrl <> " | sh -s -- --daemon" <> T.unpack yesFlag
-    result <- cmd (exe "bash" "-c" installCmd)
-    case result of
-      Left err -> error $ "Nix installation failed: " <> show err
-      Right _ -> pure ()
+    -- Manage nix.conf if specified (runs whether or not we just installed)
+    updateNixConf
 
-    -- Verify profile exists
-    profileExists <- isRight <$> cmd (exe "test" "-e" nixDaemonProfile)
-    unless profileExists $
-      error $ "Nix installed, but cannot find profile file: " <> nixDaemonProfile
+    putStrLn' "Nix daemon setup complete."
 
-    -- Print message for user
-    putStrLn' ""
-    putStrLn' "Nix installed. Add the following to your shell profile:"
-    putStrLn' $ "  . " <> T.pack nixDaemonProfile
-    putStrLn' ""
+    where
+      installNix :: WS ()
+      installNix = do
+        let ver = fromMaybe defaultNixVersion p.version
+        let installerUrl = "https://releases.nixos.org/nix/nix-" <> ver <> "/install"
+        let yesFlag = if p.interactive then "" else " --yes"
 
-    -- Restart daemon
-    restartNixDaemon
+        putStrLn' $ "Installing Nix " <> ver <> "..."
 
-    putStrLn' "Nix daemon installation complete."
+        let installCmd = "curl -L " <> T.unpack installerUrl <> " | sh -s -- --daemon" <> T.unpack yesFlag
+        result <- cmd (exe "bash" "-c" installCmd)
+        case result of
+          Left err -> error $ "Nix installation failed: " <> show err
+          Right _ -> pure ()
+
+        -- Verify profile exists
+        profileExists <- isRight <$> cmd (exe "test" "-e" nixDaemonProfile)
+        unless profileExists $
+          error $ "Nix installed, but cannot find profile file: " <> nixDaemonProfile
+
+        putStrLn' ""
+        putStrLn' "Nix installed. Add the following to your shell profile:"
+        putStrLn' $ "  . " <> T.pack nixDaemonProfile
+        putStrLn' ""
+
+        restartNixDaemon
+
+      updateNixConf :: WS ()
+      updateNixConf = case p.nixConf of
+        Nothing -> pure ()
+        Just desiredConf -> do
+          let nixConfPath = "/etc/nix/nix.conf"
+          result <- fileContentsFix nixConfPath desiredConf
+          case result of
+            Nothing -> putStrLn' "  nix.conf already has correct contents"
+            Just backupPath -> do
+              putStrLn' $ "  Updated " <> nixConfPath
+              when (backupPath /= "") $
+                putStrLn' $ "  (backed up original to " <> backupPath <> ")"
+              -- Restart daemon since config changed
+              restartNixDaemon
 
   dependencies _ = return []
 
