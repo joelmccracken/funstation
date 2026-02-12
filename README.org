@@ -1,7 +1,14 @@
-#+title: Readme
+#+title: WSHS: a workstation configuration tool
 
+Currently, this tool is heavily work-in-progress, but the eventual goal is:
 
-
+- a static(ish) executable precompiled for relevant
+  systems, that is downloadable to a new workstation for initial setup
+  - TODO note what "staticish" means here
+- Tool is written in haskell, though that should not matter to a potential user.
+  - note historic version in bash ("ws"), and haskell being chosen
+- has various "properties", expects a yaml file that declares the expected
+  workstation configuration.
 * tasks
 ** TODO document current properties
 ** TODO port all other properties from shell version
