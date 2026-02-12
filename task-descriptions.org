@@ -1,0 +1,28 @@
+#+title: Task Descriptions
+* Desc: pass sudo passsword optionally via command line
+#+begin_src md
+  support providing sudo password via `-A` and the `SUDO_ASKPASS` env var.
+  https://stackoverflow.com/questions/61919931/how-to-pass-password-to-sudo-from-environment-variable-without-prompt-appearing
+  maybe set all this up in the run-in-vm file? have some way to tell it to use -A for sudo?
+#+end_src
+* desc: also support adding nopasswd in sudoers file
+* desc: possibly automatically use sudo if user doesn't have permission
+#+begin_src md
+  add support to the dotfiles so that if the current user does not have
+  permissions to modify a given DEST file, the tool will perform the change with
+  sudo.
+#+end_src
+* desc: interactive properties
+* desc: document all current properties
+* desc: implement bitwarden secrets system
+- and others?
+* desc: do nix home manager setup
+* desc: homebrew bundle file
+* desc: verbose mode
+* desc: add makefile and commands
+- cabal build, nix build
+* desc: github actions
+* desc: windows support
+* record/describe setup of vmware fusion VM
+- so most likely, just create a second one and document it
+* desc: switch from yaml to dhall (?)
