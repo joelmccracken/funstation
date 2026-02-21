@@ -30,7 +30,8 @@ import Data.Either (isRight)
 import Data.Maybe (isJust, fromMaybe)
 import GHC.Stack
 import Data.List (intercalate)
-import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure)
+import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<))
+import Data.ByteString.Lazy.Char8 qualified as LBS
 import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
@@ -106,7 +107,8 @@ data Command
 
 data Options = Options
   { command :: Command
-  , nopasswd :: Bool  -- ^ If True, cache sudo credentials and refresh in background
+  , sudoCache :: Bool  -- ^ If True, cache sudo credentials and refresh in background
+  , sudoPassFile :: Maybe Text  -- ^ Optional path to file containing sudo password
   }
   deriving (Show)
 
@@ -574,9 +576,6 @@ instance Prop HomebrewP where
       Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
   dependencies _ = return [ (IsProp XCodeCLIToolsP) ]
 
--- TODO add sudo nopasswd support
-
-
 data AptUpdateP = AptUpdateP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
@@ -741,9 +740,14 @@ optionsParser :: Parser Options
 optionsParser = Options
   <$> commandParser
   <*> switch
-      ( long "nopasswd"
+      ( long "sudo-cache"
      <> help "Cache sudo credentials and refresh in background (prompts once at start)"
       )
+  <*> optional (T.pack <$> strOption
+      ( long "sudo-pass-file"
+     <> metavar "FILE"
+     <> help "File containing sudo password (first line only, implies --sudo-cache)"
+      ))
 
 
 parseOptions :: IO Options
@@ -782,31 +786,44 @@ ensureProperty prop = do
       put $ wsstate { props = Set.insert (IsProp prop) seen}
 
 -- | Refresh sudo credentials by running @sudo -v@.
+-- If a password file path is provided, reads the password from that file
+-- and pipes it to @sudo -S -v@. Otherwise, prompts interactively.
 -- Returns True if successful, False otherwise.
-refreshSudo :: IO Bool
-refreshSudo = isRight <$> tryFailure (exe "sudo" "-v")
+refreshSudo :: Maybe Text -> IO Bool
+refreshSudo Nothing = isRight <$> tryFailure (exe "sudo" "-v")
+refreshSudo (Just passFile) = do
+  passContent <- TIO.readFile (T.unpack passFile)
+  let pass = case T.lines passContent of
+        []    -> error $ "sudo-pass-file is empty: " <> T.unpack passFile
+        (l:_) -> T.strip l
+  -- Use <<< to pipe password to sudo -S (reads password from stdin)
+  isRight <$> tryFailure (exe "sudo" "-S" "-p" "" "-v" <<< LBS.pack (T.unpack pass <> "\n"))
 
 -- | Start a background thread that refreshes sudo credentials every 60 seconds.
 -- Returns the ThreadId so it can be killed when done.
+-- Uses Nothing for password since credentials are already cached.
 startSudoRefreshLoop :: IO ThreadId
 startSudoRefreshLoop = forkIO $ forever $ do
   threadDelay (60 * 1000000)  -- 60 seconds in microseconds
-  void refreshSudo
+  void $ refreshSudo Nothing
 
 -- | Initialize sudo credential caching.
--- Prompts for password once, then starts background refresh loop.
+-- If a password file path is provided, reads password from it.
+-- Otherwise, prompts for password interactively.
 -- Returns the ThreadId of the refresh loop, or Nothing if initial auth failed.
-initSudoCache :: IO (Maybe ThreadId)
-initSudoCache = do
-  putStrLn "Initializing sudo credential cache (you may be prompted for your password)..."
-  success <- refreshSudo
+initSudoCache :: Maybe Text -> IO (Maybe ThreadId)
+initSudoCache mpassFile = do
+  case mpassFile of
+    Nothing -> putStrLn "Initializing sudo credential cache (you may be prompted for your password)..."
+    Just _  -> putStrLn "Initializing sudo credential cache from password file..."
+  success <- refreshSudo mpassFile
   if success
     then do
       putStrLn "Sudo credentials cached. Starting background refresh..."
       tid <- startSudoRefreshLoop
       pure (Just tid)
     else do
-      putStrLn "Warning: Failed to cache sudo credentials. Continuing without nopasswd mode."
+      putStrLn "Warning: Failed to cache sudo credentials. Continuing without --sudo-cache mode."
       pure Nothing
 
 main :: IO ()
@@ -814,8 +831,8 @@ main = do
   opts <- parseOptions
 
   -- Initialize sudo caching if requested
-  sudoThread <- if opts.nopasswd
-    then initSudoCache
+  sudoThread <- if opts.sudoCache
+    then initSudoCache opts.sudoPassFile
     else pure Nothing
 
   case opts.command of

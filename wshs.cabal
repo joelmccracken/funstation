@@ -73,6 +73,7 @@ library
         yaml,
         aeson,
         text,
+        bytestring,
         optparse-applicative,
         shh,
         shelly,
@@ -91,6 +92,8 @@ executable wshs
     -- Import common warning flags.
     import:           warnings
 
+    ghc-options: -threaded
+
     -- .hs or .lhs file containing the Main module.
     main-is:          Main.hs
 
@@ -104,7 +107,6 @@ executable wshs
     build-depends:
         base,
         wshs
-
 
     -- Directories containing source files.
     hs-source-dirs:   exe

@@ -1,5 +1,3 @@
 packages: .
-
-allow-newer: shh:base
-
+-- allow-newer: shh:base
 tests: true
