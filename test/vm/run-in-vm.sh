@@ -16,10 +16,12 @@ mkdir -p "$HOSTDIR"
 for f in $HOSTDIR/*; do rm -f $f; done # bypassing that wshs ends up being write protected, there must be a better way to do this
 cp ./result/bin/wshs test/sample_configs/just_nix.yml "$HOSTDIR"
 
+echo password > "$HOSTDIR"/sudo-pass
+
 "$VMRUN" -T fusion revertToSnapshot "$VMX" "$STARTING_SNAPSHOT";
 "$VMRUN" -T fusion start "$VMX" gui;
 "$VMRUN" -T fusion -gu joel -gp password runScriptInGuest "$VMX" -interactive /bin/bash \
-    "set -x; osascript -e 'tell app \"Terminal\" to do script \"mkdir -p ~/testing; cd ~/testing; cp /Volumes/VMWare\\\ Shared\\\ Folders/vmwareshared/run-in-vm-dir/* .; ./wshs --nopasswd bootstrap just_nix.yml aeglos\"'"
+    "set -x; osascript -e 'tell app \"Terminal\" to do script \"mkdir -p ~/testing; cd ~/testing; cp /Volumes/VMWare\\\ Shared\\\ Folders/vmwareshared/run-in-vm-dir/* .; ./wshs --sudo-cache --sudo-pass-file ./sudo-pass bootstrap just_nix.yml aeglos\"'"
 
 
 # TODO come up with some way to get the output to the cli (optionally) for claude to use
