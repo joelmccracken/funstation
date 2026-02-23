@@ -209,11 +209,12 @@ fileContentsCheck path content = do
       result <- if not targetExists
         then pure False  -- Target doesn't exist, needs fixing
         else do
-          -- Compare using diff (need sudo for /etc files)
+          -- Compare using diff (may need sudo for e.g. /etc files)
           diffResult <- cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
           pure $ isRight diffResult
 
       -- Clean up temp file
+      -- TODO bracket to clean up
       void $ cmd (exe "rm" "-f" tempFile)
 
       pure result
@@ -221,6 +222,7 @@ fileContentsCheck path content = do
 -- | Ensure a file has the desired contents.
 -- Returns Nothing if no change was needed, Just backupPath if the file was updated.
 -- The backupPath will be empty string if no backup was needed (file didn't exist).
+-- TODO think about what parts to reuse/share (e.g. with dotfiles code)
 fileContentsFix :: Text -> Text -> WS (Maybe Text)
 fileContentsFix path content = do
   -- First check if file already has correct contents
@@ -553,6 +555,7 @@ instance Prop XCodeCLIToolsP where
       result <- cmd (exe "bash" "-c" findAndInstall)
 
       -- Clean up marker
+      -- TODO bracket to clean up
       void $ cmd (exe "rm" "-f" "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress")
 
       case result of
