@@ -80,7 +80,8 @@ library
         mtl,
         path,
         time,
-        containers
+        containers,
+        filepath
 
     -- Directories containing source files.
     hs-source-dirs:   src

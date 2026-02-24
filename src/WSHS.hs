@@ -50,6 +50,7 @@ import Data.Set (Set)
 import Data.Aeson.Types hiding (Parser, Options)
 -- import Data.Aeson.TH hiding (Options)
 import GHC.Generics (Generic)
+import System.FilePath (takeDirectory)
 
 -- have a config.yaml in a known location
 -- have a current.yaml at a known location for the "right now" settings
@@ -168,6 +169,48 @@ expandPath path = do
   result <- cmd (exe "bash" "-c" ("echo " <> T.unpack path) |> captureTrim)
   pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
 
+-- | Check if sudo is needed to read a path.
+-- For existing files, checks read permission on the file.
+-- For non-existent files, returns False (nothing to read).
+needsSudoRead :: Text -> WS Bool
+needsSudoRead path = do
+  let pathStr = T.unpack path
+  exists <- isRight <$> cmd (exe "test" "-e" pathStr)
+  if exists
+    then do
+      readable <- isRight <$> cmd (exe "test" "-r" pathStr)
+      pure $ not readable
+    else
+      pure False
+
+-- | Check if sudo is needed to write to a path.
+-- For existing files, checks write permission on the file.
+-- For non-existent files, checks write permission on the parent directory.
+needsSudo :: Text -> WS Bool
+needsSudo path = do
+  let pathStr = T.unpack path
+  exists <- isRight <$> cmd (exe "test" "-e" pathStr)
+  if exists
+    then do
+      writable <- isRight <$> cmd (exe "test" "-w" pathStr)
+      pure $ not writable
+    else do
+      let parentDir = takeDirectory pathStr
+      writable <- isRight <$> cmd (exe "test" "-w" parentDir)
+      pure $ not writable
+
+-- | Get "owner:group" for a path, for use with chown.
+-- Uses ls -ld which works on both macOS and Linux.
+getOwnerGroup :: Text -> WS Text
+getOwnerGroup path = do
+  result <- cmd (exe "ls" "-ld" (T.unpack path) |> captureTrim)
+  case result of
+    Left _ -> pure "root:root"
+    Right bytes ->
+      case words $ TL.unpack $ TL.decodeUtf8 bytes of
+        (_:_:owner:group:_) -> pure $ T.pack owner <> ":" <> T.pack group
+        _ -> pure "root:root"
+
 mvToBackup :: Text -> WS ()
 mvToBackup path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
@@ -177,17 +220,24 @@ mvToBackup path = do
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
     Left err -> error $ "Failed to move file: " <> show err
 
--- | Move a file to a timestamped backup using sudo (for /etc files)
-mvToBackupSudo :: Text -> WS Text
-mvToBackupSudo path = do
+-- | Move a file to a timestamped backup, using sudo only if needed.
+mvToBackupAuto :: Text -> WS Text
+mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- cmd (exe "sudo" "mv" (T.unpack path) (T.unpack backupPath))
+  useSudo <- needsSudo path
+  result <- if useSudo
+    then cmd (exe "sudo" "mv" (T.unpack path) (T.unpack backupPath))
+    else cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
   case result of
     Right _ -> do
       putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
       pure backupPath
     Left err -> error $ "Failed to backup file: " <> show err
+
+{-# DEPRECATED mvToBackupSudo "Use mvToBackupAuto instead" #-}
+mvToBackupSudo :: Text -> WS Text
+mvToBackupSudo = mvToBackupAuto
 
 -- | Check if a file has the desired contents.
 -- Returns True if the file exists and matches, False otherwise.
@@ -209,8 +259,11 @@ fileContentsCheck path content = do
       result <- if not targetExists
         then pure False  -- Target doesn't exist, needs fixing
         else do
-          -- Compare using diff (may need sudo for e.g. /etc files)
-          diffResult <- cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
+          -- Compare using diff (only need read access to target file)
+          useSudo <- needsSudoRead path
+          diffResult <- if useSudo
+            then cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
+            else cmd (exe "diff" "-q" tempFile (T.unpack path) &> devNull)
           pure $ isRight diffResult
 
       -- Clean up temp file
@@ -240,17 +293,29 @@ fileContentsFix path content = do
           -- Write desired content to temp file
           liftIO $ TIO.writeFile tempFile content
 
-          -- Check if target exists and back it up
+          -- Check if target exists; capture owner info before any changes
           targetExists <- isRight <$> cmd (exe "test" "-e" (T.unpack path))
+          ownerGroup <- if targetExists
+            then getOwnerGroup path
+            else getOwnerGroup (T.pack $ takeDirectory (T.unpack path))
+
+          -- Back up existing file if present
           backupPath <- if targetExists
-            then mvToBackupSudo path
+            then mvToBackupAuto path
             else pure ""
 
-          -- Move temp file to target location (requires sudo for /etc)
-          moveResult <- cmd (exe "sudo" "mv" tempFile (T.unpack path))
+          -- Move temp file to target location (only use sudo if needed)
+          useSudo <- needsSudo path
+          moveResult <- if useSudo
+            then cmd (exe "sudo" "mv" tempFile (T.unpack path))
+            else cmd (exe "mv" tempFile (T.unpack path))
           case moveResult of
             Left err -> error $ "Failed to move file to " <> T.unpack path <> ": " <> show err
             Right _ -> pure ()
+
+          -- Restore original ownership when sudo was used
+          when useSudo $
+            void $ cmd (exe "sudo" "chown" (T.unpack ownerGroup) (T.unpack path))
 
           pure $ Just backupPath
 
