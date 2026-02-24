@@ -99,11 +99,16 @@ data Configuration = Configuration
   }
   deriving (Generic, Show, FromJSON)
 
+data NixSubcommand
+  = NixRestart
+  deriving (Show)
+
 data Command
   = Bootstrap
     { configPath :: FilePath
     , workstation :: Text
     }
+  | Nix NixSubcommand
   deriving (Show)
 
 data Options = Options
@@ -138,7 +143,7 @@ tshow = T.pack . show
 cmd :: MonadIO m => Proc a -> m (Either Failure a)
 cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
-detectOS :: WS OS
+detectOS :: MonadIO m => m OS
 detectOS = do
   osCheck  <- cmd (exe "uname" "-s" |> captureTrim)
   case osCheck of
@@ -147,7 +152,7 @@ detectOS = do
     Right "Linux" -> detectLinuxOS
     Right _ -> return Unknown
 
-detectLinuxOS :: WS  OS
+detectLinuxOS :: MonadIO m => m OS
 detectLinuxOS = do
   -- Check if it's Debian-based
   debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
@@ -684,16 +689,16 @@ instance Prop WSConfigDirP where
   dependencies _ = return [IsProp HasGitP]
 
 -- | Restart the Nix daemon (OS-aware)
-restartNixDaemon :: WS ()
+restartNixDaemon :: MonadIO m => m ()
 restartNixDaemon = do
   os <- detectOS
   case os of
     MacOS -> do
-      putStrLn' "Restarting Nix daemon (macOS)..."
+      liftIO $ putStrLn "Restarting Nix daemon (macOS)..."
       void $ cmd (exe "sudo" "launchctl" "unload" "/Library/LaunchDaemons/org.nixos.nix-daemon.plist")
       void $ cmd (exe "sudo" "launchctl" "load" "/Library/LaunchDaemons/org.nixos.nix-daemon.plist")
     Debian -> do
-      putStrLn' "Restarting Nix daemon (Debian)..."
+      liftIO $ putStrLn "Restarting Nix daemon (Debian)..."
       void $ cmd (exe "sudo" "systemctl" "restart" "nix-daemon.service")
     Unknown -> error "Cannot restart nix daemon: unknown OS"
 
@@ -796,11 +801,23 @@ bootstrapParser = Bootstrap
       ( metavar "WORKSTATION"
      <> help "Name of the current workstation" )
 
+nixSubcommandParser :: Parser NixSubcommand
+nixSubcommandParser = subparser
+  ( App.command "restart"
+    ( info (pure NixRestart <**> helper)
+      ( progDesc "Restart the Nix daemon" )
+    )
+  )
+
 commandParser :: Parser Command
 commandParser = subparser
   ( App.command "bootstrap"
     ( info (bootstrapParser <**> helper)
       ( progDesc "Bootstrap a new workstation" )
+    )
+ <> App.command "nix"
+    ( info (Nix <$> nixSubcommandParser <**> helper)
+      ( progDesc "Nix package manager utilities" )
     )
   )
 
@@ -913,6 +930,8 @@ main = do
         ensureProperty (IsProp BasicSetupP)
         ensureProperty (IsProp WSConfigDirP)
         forM_ (getProp <$> cfg.properties) ensureProperty
+    Nix NixRestart ->
+      restartNixDaemon
 
   -- Clean up sudo refresh thread
   case sudoThread of
