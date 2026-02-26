@@ -2,24 +2,36 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 
-module Main (main) where
+module Main (main, main2) where
 
 import Test.Hspec
 import Text.RawString.QQ
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.IO qualified as T
+import Data.Text.Encoding qualified as T
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.IO qualified as TL
+import Data.Text.Lazy.Encoding qualified as TL
+
+
+-- import Data.Text.Encoding (encodeUtf8)
 import Data.Yaml (decodeThrow)
 import WSHS hiding (main)
 import Control.Monad (forM_)
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
+import Control.Monad.IO.Class
 import System.Directory
 import System.FilePath ((</>))
 import System.Posix.Files (createSymbolicLink)
 import System.IO.Temp (withSystemTempDirectory)
 import Data.Set qualified as Set
+import Shh.Internal (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<), toArgs, asArg, displayCommand, Cmd)
+import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state
@@ -61,6 +73,35 @@ properties:
   params:
     gitDir: ".git-homedir"
 |]
+
+
+
+main2 :: IO ()
+main2 = hspec $ do
+  it "experimentation space" $ do
+    liftIO $ tryFailure $ toArgs (asArg "env") "touch" "foobar"
+    liftIO $ tryFailure $ exe ["env", "bash", "-c", "echo something great > foobar2"]
+    capt <- liftIO $ ( exe ["env", "cat", "foobar2"] |> captureTrim)
+
+    capt `shouldBe` "something great"
+
+    let pth = "foobar2"
+    foo <- liftIO $ do
+      let x = ["echo", "the file is '", capt, "' at filen named ", pth ]
+      useSudo <- pure False
+      putStrLn "before"
+      if useSudo
+        then pure ((exe $ "sudo" : x) :: [ByteString])
+        else pure (exe $ "env" : x)
+    putStrLn $ show $ displayCommand $ exe foo
+    putStrLn "before1"
+    _ <- exe foo
+    putStrLn "after1"
+
+    userCmd <- maybeSudo' "root_only" ["bash", "-c", "echo $USER"]
+    user <- liftIO $ userCmd |> captureTrim
+    -- TL.putStrLn $ TL.decodeLatin1 res
+    user `shouldBe` "root"
 
 main :: IO ()
 main = hspec $ do

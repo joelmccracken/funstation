@@ -12,7 +12,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-
+{-# LANGUAGE ImpredicativeTypes #-}
 
 module WSHS (module WSHS) where
 
@@ -30,7 +30,7 @@ import Data.Either (isRight)
 import Data.Maybe (isJust, fromMaybe)
 import GHC.Stack
 import Data.List (intercalate)
-import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<))
+import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<), Cmd)
 import Data.ByteString.Lazy.Char8 qualified as LBS
 import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
@@ -177,7 +177,7 @@ expandPath path = do
 -- | Check if sudo is needed to read a path.
 -- For existing files, checks read permission on the file.
 -- For non-existent files, returns False (nothing to read).
-needsSudoRead :: Text -> WS Bool
+needsSudoRead :: Text -> IO Bool
 needsSudoRead path = do
   let pathStr = T.unpack path
   exists <- isRight <$> cmd (exe "test" "-e" pathStr)
@@ -191,7 +191,7 @@ needsSudoRead path = do
 -- | Check if sudo is needed to write to a path.
 -- For existing files, checks write permission on the file.
 -- For non-existent files, checks write permission on the parent directory.
-needsSudo :: Text -> WS Bool
+needsSudo :: Text -> IO Bool
 needsSudo path = do
   let pathStr = T.unpack path
   exists <- isRight <$> cmd (exe "test" "-e" pathStr)
@@ -203,6 +203,18 @@ needsSudo path = do
       let parentDir = takeDirectory pathStr
       writable <- isRight <$> cmd (exe "test" "-w" parentDir)
       pure $ not writable
+
+
+-- | Ensure a parent directory exists, using sudo only if needed.
+ensureParentDir :: Text -> WS ()
+ensureParentDir path = do
+  let parentDir = T.pack $ takeDirectory (T.unpack path)
+  exists <- isRight <$> cmd (exe "test" "-d" (T.unpack parentDir))
+  unless exists $ do
+    result <- maybeSudo parentDir ["mkdir", "-p", T.unpack parentDir]
+    case result of
+      Right _ -> pure ()
+      Left err -> error $ "Failed to create directory " <> T.unpack parentDir <> ": " <> show err
 
 -- | Get "owner:group" for a path, for use with chown.
 -- Uses ls -ld which works on both macOS and Linux.
@@ -225,15 +237,51 @@ mvToBackup path = do
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
     Left err -> error $ "Failed to move file: " <> show err
 
+
+-- | Run a command with sudo if the path requires write access, or via env otherwise.
+-- Using env as a no-op prefix keeps both branches structurally identical.
+maybeSudo :: Text -> [String] -> WS (Either Failure ())
+maybeSudo pth x = do
+  useSudo <- liftIO $ needsSudo pth
+  if useSudo
+    then cmd (exe "sudo" x)
+    else cmd (exe "env" x)
+
+
+maybeSudo' :: Text -> [LBS.ByteString] -> IO Cmd
+maybeSudo' pth x = do
+  useSudo <- needsSudo pth
+  if useSudo
+    then pure (exe $ "sudo" : x)
+    else pure (exe $ "env" : x)
+
+
+
+
+-- | Like maybeSudo but checks read access instead of write access.
+maybeSudoRead :: Text -> [String] -> WS (Either Failure ())
+maybeSudoRead pth x = do
+  useSudo <- liftIO $ needsSudoRead pth
+  if useSudo
+    then cmd (exe "sudo" x)
+    else cmd (exe "env" x)
+
+
+maybeSudoRead' :: Text -> [LBS.ByteString] -> IO Cmd
+maybeSudoRead' pth x = do
+  useSudo <- needsSudo pth
+  if useSudo
+    then pure (exe $ "sudo" : x)
+    else pure (exe $ "env" : x)
+
+
+
 -- | Move a file to a timestamped backup, using sudo only if needed.
 mvToBackupAuto :: Text -> WS Text
 mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  useSudo <- needsSudo path
-  result <- if useSudo
-    then cmd (exe "sudo" "mv" (T.unpack path) (T.unpack backupPath))
-    else cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
+  result <- maybeSudo path ["mv", T.unpack path, T.unpack backupPath]
   case result of
     Right _ -> do
       putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
@@ -265,10 +313,14 @@ fileContentsCheck path content = do
         then pure False  -- Target doesn't exist, needs fixing
         else do
           -- Compare using diff (only need read access to target file)
-          useSudo <- needsSudoRead path
-          diffResult <- if useSudo
-            then cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
-            else cmd (exe "diff" "-q" tempFile (T.unpack path) &> devNull)
+
+          diffCmd <- liftIO $ maybeSudoRead' path ["diff", "-q", LBS.pack tempFile, LBS.pack (T.unpack path)]
+          diffResult <- cmd $ diffCmd &> devNull
+
+          -- useSudo <- liftIO $ needsSudoRead path
+          -- diffResult <- if useSudo
+          --   then cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
+          --   else cmd (exe "env" "diff" "-q" tempFile (T.unpack path) &> devNull)
           pure $ isRight diffResult
 
       -- Clean up temp file
@@ -310,18 +362,15 @@ fileContentsFix path content = do
             else pure ""
 
           -- Move temp file to target location (only use sudo if needed)
-          useSudo <- needsSudo path
-          moveResult <- if useSudo
-            then cmd (exe "sudo" "mv" tempFile (T.unpack path))
-            else cmd (exe "mv" tempFile (T.unpack path))
+          moveResult <- maybeSudo path ["mv", tempFile, T.unpack path]
           case moveResult of
             Left err -> error $ "Failed to move file to " <> T.unpack path <> ": " <> show err
             Right _ -> pure ()
 
           -- Restore original ownership when sudo was used
-          when useSudo $
-            void $ cmd (exe "sudo" "chown" (T.unpack ownerGroup) (T.unpack path))
-
+          -- useSudo <- liftIO $ needsSudo path
+          diffCmd <- liftIO $ maybeSudo' path ["chown", LBS.pack (T.unpack ownerGroup), LBS.pack (T.unpack path)]
+          _<- cmd diffCmd
           pure $ Just backupPath
 
 class Prop p where
