@@ -238,41 +238,39 @@ mvToBackup path = do
     Left err -> error $ "Failed to move file: " <> show err
 
 
+-- | Core helper: run args with the given sudo command if the needs check passes,
+-- or via env otherwise. Pass "sudo" normally; inject a fake command in tests.
+maybeSudoWithCmd :: String -> (Text -> IO Bool) -> Text -> [String] -> WS (Either Failure ())
+maybeSudoWithCmd sudoCmd needsFn pth args = do
+  useSudo <- liftIO $ needsFn pth
+  if useSudo
+    then cmd (exe sudoCmd args)
+    else cmd (exe "env" args)
+
 -- | Run a command with sudo if the path requires write access, or via env otherwise.
 -- Using env as a no-op prefix keeps both branches structurally identical.
 maybeSudo :: Text -> [String] -> WS (Either Failure ())
-maybeSudo pth x = do
-  useSudo <- liftIO $ needsSudo pth
-  if useSudo
-    then cmd (exe "sudo" x)
-    else cmd (exe "env" x)
-
-
-maybeSudo' :: Text -> [LBS.ByteString] -> IO Cmd
-maybeSudo' pth x = do
-  useSudo <- needsSudo pth
-  if useSudo
-    then pure (exe $ "sudo" : x)
-    else pure (exe $ "env" : x)
-
-
-
+maybeSudo = maybeSudoWithCmd "sudo" needsSudo
 
 -- | Like maybeSudo but checks read access instead of write access.
 maybeSudoRead :: Text -> [String] -> WS (Either Failure ())
-maybeSudoRead pth x = do
-  useSudo <- liftIO $ needsSudoRead pth
-  if useSudo
-    then cmd (exe "sudo" x)
-    else cmd (exe "env" x)
+maybeSudoRead = maybeSudoWithCmd "sudo" needsSudoRead
 
+
+-- | Core helper for the Proc-returning variants, allowing sudo command injection.
+-- Returns an IO Cmd so callers can chain shh operators like |> and &>.
+maybeSudoWithCmd' :: LBS.ByteString -> (Text -> IO Bool) -> Text -> [LBS.ByteString] -> IO Cmd
+maybeSudoWithCmd' sudoCmd needsFn pth args = do
+  useSudo <- needsFn pth
+  if useSudo
+    then pure (exe $ sudoCmd : args)
+    else pure (exe $ "env" : args)
+
+maybeSudo' :: Text -> [LBS.ByteString] -> IO Cmd
+maybeSudo' = maybeSudoWithCmd' "sudo" needsSudo
 
 maybeSudoRead' :: Text -> [LBS.ByteString] -> IO Cmd
-maybeSudoRead' pth x = do
-  useSudo <- needsSudo pth
-  if useSudo
-    then pure (exe $ "sudo" : x)
-    else pure (exe $ "env" : x)
+maybeSudoRead' = maybeSudoWithCmd' "sudo" needsSudoRead
 
 
 
@@ -368,9 +366,7 @@ fileContentsFix path content = do
             Right _ -> pure ()
 
           -- Restore original ownership when sudo was used
-          -- useSudo <- liftIO $ needsSudo path
-          diffCmd <- liftIO $ maybeSudo' path ["chown", LBS.pack (T.unpack ownerGroup), LBS.pack (T.unpack path)]
-          _<- cmd diffCmd
+          void $ maybeSudo path ["chown", T.unpack ownerGroup, T.unpack path]
           pure $ Just backupPath
 
 class Prop p where
