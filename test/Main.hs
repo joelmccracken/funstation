@@ -32,6 +32,8 @@ import System.IO.Temp (withSystemTempDirectory)
 import Data.Set qualified as Set
 import Shh.Internal (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<), toArgs, asArg, displayCommand, Cmd)
 import Data.ByteString.Lazy hiding (writeFile, readFile, length)
+import Data.String (fromString)
+import Data.Either (isRight)
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state
@@ -807,3 +809,54 @@ main = hspec $ do
       -- Verify new content
       updatedContent <- readFile testFile
       updatedContent `shouldBe` newContent
+
+  describe "maybeSudoWithCmd" $ do
+    let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+
+    it "runs command via env when needsFn returns False" $ withTempDir $ \tmpDir -> do
+      -- needsFn always False → command runs as: env bash -c "echo hello > file"
+      let outFile = tmpDir </> "out.txt"
+      _ <- runWS $ maybeSudoWithCmd "sudo" (const $ pure False) (T.pack tmpDir)
+                     ["bash", "-c", "echo hello > " <> outFile]
+      content <- readFile outFile
+      content `shouldBe` "hello\n"
+
+    it "runs command via injected sudo command when needsFn returns True" $ withTempDir $ \tmpDir -> do
+      -- inject "env" as fake sudo → runs as: env env bash -c "echo hello > file"
+      let outFile = tmpDir </> "out.txt"
+      _ <- runWS $ maybeSudoWithCmd "env" (const $ pure True) (T.pack tmpDir)
+                     ["bash", "-c", "echo hello > " <> outFile]
+      content <- readFile outFile
+      content `shouldBe` "hello\n"
+
+    it "fails when the command fails" $ withTempDir $ \tmpDir -> do
+      result <- runWS $ maybeSudoWithCmd "sudo" (const $ pure False) (T.pack tmpDir) ["false"]
+      result `shouldSatisfy` \case
+        Left _  -> True
+        Right _ -> False
+
+  describe "maybeSudoWithCmd'" $ do
+    let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+
+    it "captures file contents when needsFn returns False" $ withTempDir $ \tmpDir -> do
+      -- Write known content to a file, then capture it via cat
+      let srcFile = tmpDir </> "src.txt"
+      writeFile srcFile "hello from file"
+      c <- maybeSudoWithCmd' "sudo" (const $ pure False) (T.pack tmpDir) ["cat", fromString srcFile]
+      result <- c |> captureTrim
+      result `shouldBe` "hello from file"
+
+    it "captures file contents using injected sudo when needsFn returns True" $ withTempDir $ \tmpDir -> do
+      -- inject "env" as fake sudo → runs as: env cat file
+      let srcFile = tmpDir </> "src.txt"
+      writeFile srcFile "hello from file"
+      c <- maybeSudoWithCmd' "env" (const $ pure True) (T.pack tmpDir) ["cat", fromString srcFile]
+      result <- c |> captureTrim
+      result `shouldBe` "hello from file"
+
+    it "returned Cmd can be redirected with &> devNull" $ withTempDir $ \tmpDir -> do
+      let srcFile = tmpDir </> "src.txt"
+      writeFile srcFile "some content"
+      c <- maybeSudoWithCmd' "sudo" (const $ pure False) (T.pack tmpDir) ["cat", fromString srcFile]
+      result <- tryFailure $ c &> devNull
+      result `shouldSatisfy` isRight
