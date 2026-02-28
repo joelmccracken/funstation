@@ -78,6 +78,7 @@ properties:
 
 main :: IO ()
 main = hspec $ do
+
   it "experimentation space" $ do
     liftIO $ tryFailure $ toArgs (asArg "env") "touch" "foobar"
     liftIO $ tryFailure $ exe ["env", "bash", "-c", "echo something great > foobar2"]
@@ -98,7 +99,7 @@ main = hspec $ do
     _ <- exe foo
     putStrLn "after1"
 
-    userCmd <- maybeSudo' "root_only" ["bash", "-c", "echo $USER"]
+    userCmd <- mkPrivCmd "sudo" WriteAccess "root_only" ["bash", "-c", "echo $USER"]
     user <- liftIO $ userCmd |> captureTrim
     -- TL.putStrLn $ TL.decodeLatin1 res
     user `shouldBe` "root"

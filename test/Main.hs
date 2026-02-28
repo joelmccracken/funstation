@@ -32,7 +32,6 @@ import System.IO.Temp (withSystemTempDirectory)
 import Data.Set qualified as Set
 import Shh.Internal (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<), toArgs, asArg, displayCommand, Cmd)
 import Data.ByteString.Lazy hiding (writeFile, readFile, length)
-import Data.String (fromString)
 import Data.Either (isRight)
 
 -- | Run a WS action with a minimal configuration
@@ -51,6 +50,17 @@ runWS action = do
         , properties = []
         }
   let settings = Settings { opts = opts, configuration = cfg, sudoCmd = "sudo" }
+  let initialState = WSState { props = Set.empty }
+  fst <$> runStateT (runReaderT (unWS action) settings) initialState
+
+-- | Run a WS action with a specific sudoCmd in Settings
+runWSWith :: String -> WS a -> IO a
+runWSWith sc action = do
+  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
+  let cfg = Configuration
+        { configDir = "", configRepoUrl = "", configRepoOrigin = ""
+        , configRepoBranch = "", properties = [] }
+  let settings = Settings { opts = opts, configuration = cfg, sudoCmd = sc }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
 
@@ -100,7 +110,7 @@ main2 = hspec $ do
     _ <- exe foo
     putStrLn "after1"
 
-    userCmd <- maybeSudo' "root_only" ["bash", "-c", "echo $USER"]
+    userCmd <- mkPrivCmd "sudo" WriteAccess "root_only" ["bash", "-c", "echo $USER"]
     user <- liftIO $ userCmd |> captureTrim
     -- TL.putStrLn $ TL.decodeLatin1 res
     user `shouldBe` "root"
@@ -810,103 +820,67 @@ main = hspec $ do
       updatedContent <- readFile testFile
       updatedContent `shouldBe` newContent
 
-  describe "maybeSudoWithCmd" $ do
+  describe "mkPrivCmd" $ do
     let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
 
-    it "runs command via env when needsFn returns False" $ withTempDir $ \tmpDir -> do
-      -- needsFn always False → command runs as: env bash -c "echo hello > file"
+    it "uses env prefix when path is user-owned (no sudo needed)" $ withTempDir $ \tmpDir -> do
+      -- Path is user-owned → needsSudo returns False → exe ("env" : args)
       let outFile = tmpDir </> "out.txt"
-      _ <- runWS $ maybeSudoWithCmd "sudo" (const $ pure False) (T.pack tmpDir)
-                     ["bash", "-c", "echo hello > " <> outFile]
+      c <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir) ["bash", "-c", "echo hello > " <> outFile]
+      _ <- c
       content <- readFile outFile
       content `shouldBe` "hello\n"
 
-    it "runs command via injected sudo command when needsFn returns True" $ withTempDir $ \tmpDir -> do
-      -- inject "env" as fake sudo → runs as: env env bash -c "echo hello > file"
+    it "uses injected sudo command when needs check returns True (injected as env)" $ withTempDir $ \tmpDir -> do
+      -- inject "env" as the sudo command so the command succeeds even if sudo branch is taken
       let outFile = tmpDir </> "out.txt"
-      _ <- runWS $ maybeSudoWithCmd "env" (const $ pure True) (T.pack tmpDir)
-                     ["bash", "-c", "echo hello > " <> outFile]
+      c <- mkPrivCmd "env" WriteAccess (T.pack tmpDir) ["bash", "-c", "echo injected > " <> outFile]
+      _ <- c
       content <- readFile outFile
-      content `shouldBe` "hello\n"
+      content `shouldBe` "injected\n"
 
-    it "fails when the command fails" $ withTempDir $ \tmpDir -> do
-      result <- runWS $ maybeSudoWithCmd "sudo" (const $ pure False) (T.pack tmpDir) ["false"]
-      result `shouldSatisfy` \case
-        Left _  -> True
-        Right _ -> False
-
-  describe "maybeSudoWithCmd'" $ do
-    let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
-
-    it "captures file contents when needsFn returns False" $ withTempDir $ \tmpDir -> do
-      -- Write known content to a file, then capture it via cat
+    it "returned Cmd can be chained with |> to capture output" $ withTempDir $ \tmpDir -> do
       let srcFile = tmpDir </> "src.txt"
-      writeFile srcFile "hello from file"
-      c <- maybeSudoWithCmd' "sudo" (const $ pure False) (T.pack tmpDir) ["cat", fromString srcFile]
+      writeFile srcFile "captured content"
+      c <- mkPrivCmd "sudo" ReadAccess (T.pack srcFile) ["cat", srcFile]
       result <- c |> captureTrim
-      result `shouldBe` "hello from file"
+      result `shouldBe` "captured content"
 
-    it "captures file contents using injected sudo when needsFn returns True" $ withTempDir $ \tmpDir -> do
-      -- inject "env" as fake sudo → runs as: env cat file
-      let srcFile = tmpDir </> "src.txt"
-      writeFile srcFile "hello from file"
-      c <- maybeSudoWithCmd' "env" (const $ pure True) (T.pack tmpDir) ["cat", fromString srcFile]
-      result <- c |> captureTrim
-      result `shouldBe` "hello from file"
-
-    it "returned Cmd can be redirected with &> devNull" $ withTempDir $ \tmpDir -> do
+    it "returned Cmd can be chained with &> devNull" $ withTempDir $ \tmpDir -> do
       let srcFile = tmpDir </> "src.txt"
       writeFile srcFile "some content"
-      c <- maybeSudoWithCmd' "sudo" (const $ pure False) (T.pack tmpDir) ["cat", fromString srcFile]
+      c <- mkPrivCmd "sudo" ReadAccess (T.pack srcFile) ["cat", srcFile]
       result <- tryFailure $ c &> devNull
       result `shouldSatisfy` isRight
 
-  describe "maybeSudoSettings" $ do
+  describe "privCmd" $ do
     let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
 
-    -- Helper that runs WS with a specific sudoCmd in Settings
-    let runWSWith sc action = do
-          let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
-          let cfg = Configuration
-                { configDir = "", configRepoUrl = "", configRepoOrigin = ""
-                , configRepoBranch = "", properties = [] }
-          let settings = Settings { opts = opts, configuration = cfg, sudoCmd = sc }
-          let initialState = WSState { props = Set.empty }
-          fst <$> runStateT (runReaderT (unWS action) settings) initialState
-
-    it "uses sudo command from Settings when needs check passes (injected as env)" $ withTempDir $ \tmpDir -> do
-      -- Use "env" as fake sudo so the test doesn't need real privileges.
-      -- needsFn returns True, so the injected "env" prefix is used, command still succeeds.
+    it "runs WriteAccess command on user-owned path without sudo" $ withTempDir $ \tmpDir -> do
       let outFile = tmpDir </> "out.txt"
-      _ <- runWSWith "env" $ maybeSudoSettings (T.pack tmpDir)
-                               ["bash", "-c", "echo settings-sudo > " <> outFile]
-      content <- readFile outFile
-      content `shouldBe` "settings-sudo\n"
-
-    it "uses sudo command from Settings when needs check fails (runs via env)" $ withTempDir $ \tmpDir -> do
-      -- sudoCmd = "sudo" but the path is user-owned so needsSudo returns False → runs via env
-      let outFile = tmpDir </> "out.txt"
-      _ <- runWSWith "sudo" $ maybeSudoSettings (T.pack tmpDir)
-                                ["bash", "-c", "echo no-sudo-needed > " <> outFile]
-      content <- readFile outFile
-      content `shouldBe` "no-sudo-needed\n"
-
-  describe "maybeSudoReadSettings" $ do
-    let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
-
-    let runWSWith sc action = do
-          let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
-          let cfg = Configuration
-                { configDir = "", configRepoUrl = "", configRepoOrigin = ""
-                , configRepoBranch = "", properties = [] }
-          let settings = Settings { opts = opts, configuration = cfg, sudoCmd = sc }
-          let initialState = WSState { props = Set.empty }
-          fst <$> runStateT (runReaderT (unWS action) settings) initialState
-
-    it "reads sudo command from Settings for read operations" $ withTempDir $ \tmpDir -> do
-      -- File is user-owned so needsSudoRead returns False → runs via env
-      let srcFile = tmpDir </> "src.txt"
-      writeFile srcFile "read content"
-      result <- runWSWith "sudo" $ maybeSudoReadSettings (T.pack srcFile)
-                                     ["cat", srcFile]
+      result <- runWS $ privCmd WriteAccess (T.pack tmpDir)
+                          ["bash", "-c", "echo write-ok > " <> outFile]
       result `shouldSatisfy` isRight
+      content <- readFile outFile
+      content `shouldBe` "write-ok\n"
+
+    it "reads sudoCmd from Settings (injected as env) for write path" $ withTempDir $ \tmpDir -> do
+      -- sudoCmd = "env" means even if sudo were needed, env is used — command succeeds
+      let outFile = tmpDir </> "out.txt"
+      result <- runWSWith "env" $ privCmd WriteAccess (T.pack tmpDir)
+                                    ["bash", "-c", "echo env-sudo > " <> outFile]
+      result `shouldSatisfy` isRight
+      content <- readFile outFile
+      content `shouldBe` "env-sudo\n"
+
+    it "runs ReadAccess command on user-owned file" $ withTempDir $ \tmpDir -> do
+      let srcFile = tmpDir </> "src.txt"
+      writeFile srcFile "read-ok"
+      result <- runWS $ privCmd ReadAccess (T.pack srcFile) ["cat", srcFile]
+      result `shouldSatisfy` isRight
+
+    it "fails when the command itself fails" $ withTempDir $ \tmpDir -> do
+      result <- runWS $ privCmd WriteAccess (T.pack tmpDir) ["false"]
+      result `shouldSatisfy` \case
+        Left _  -> True
+        Right _ -> False

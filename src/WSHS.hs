@@ -212,7 +212,7 @@ ensureParentDir path = do
   let parentDir = T.pack $ takeDirectory (T.unpack path)
   exists <- isRight <$> cmd (exe "test" "-d" (T.unpack parentDir))
   unless exists $ do
-    result <- maybeSudo parentDir ["mkdir", "-p", T.unpack parentDir]
+    result <- privCmd WriteAccess parentDir ["mkdir", "-p", T.unpack parentDir]
     case result of
       Right _ -> pure ()
       Left err -> error $ "Failed to create directory " <> T.unpack parentDir <> ": " <> show err
@@ -239,60 +239,38 @@ mvToBackup path = do
     Left err -> error $ "Failed to move file: " <> show err
 
 
--- | Core helper: run args with the given sudo command if the needs check passes,
--- or via env otherwise. Pass "sudo" normally; inject a fake command in tests.
-maybeSudoWithCmd :: String -> (Text -> IO Bool) -> Text -> [String] -> WS (Either Failure ())
-maybeSudoWithCmd sudoCmd needsFn pth args = do
-  useSudo <- liftIO $ needsFn pth
-  if useSudo
-    then cmd (exe sudoCmd args)
-    else cmd (exe "env" args)
+-- | Which filesystem permission to check when deciding whether sudo is needed.
+data AccessMode = ReadAccess | WriteAccess
 
--- | Run a command with sudo if the path requires write access, or via env otherwise.
--- Using env as a no-op prefix keeps both branches structurally identical.
-maybeSudo :: Text -> [String] -> WS (Either Failure ())
-maybeSudo = maybeSudoWithCmd "sudo" needsSudo
+needsSudoFor :: AccessMode -> Text -> IO Bool
+needsSudoFor ReadAccess  = needsSudoRead
+needsSudoFor WriteAccess = needsSudo
 
--- | Like maybeSudo but checks read access instead of write access.
-maybeSudoRead :: Text -> [String] -> WS (Either Failure ())
-maybeSudoRead = maybeSudoWithCmd "sudo" needsSudoRead
+-- | Build an IO Cmd that prepends the given sudo command if the path requires
+-- the specified access, or @env@ (a no-op prefix) otherwise.
+-- The returned IO Cmd can be chained with shh operators like |> and &>.
+mkPrivCmd :: String -> AccessMode -> Text -> [String] -> IO Cmd
+mkPrivCmd sudoCmd mode pth args = do
+  useSudo <- needsSudoFor mode pth
+  pure $ if useSudo
+    then exe (sudoCmd : args)
+    else exe ("env"   : args)
 
--- | Like maybeSudo but reads the sudo command from Settings.
-maybeSudoSettings :: Text -> [String] -> WS (Either Failure ())
-maybeSudoSettings pth args = do
+-- | Run a privilege-escalating command in the WS monad.
+-- Reads the sudo command from Settings; uses AccessMode to choose the
+-- permission check (read or write).
+privCmd :: AccessMode -> Text -> [String] -> WS (Either Failure ())
+privCmd mode pth args = do
   sc <- asks (.sudoCmd)
-  maybeSudoWithCmd sc needsSudo pth args
-
--- | Like maybeSudoRead but reads the sudo command from Settings.
-maybeSudoReadSettings :: Text -> [String] -> WS (Either Failure ())
-maybeSudoReadSettings pth args = do
-  sc <- asks (.sudoCmd)
-  maybeSudoWithCmd sc needsSudoRead pth args
-
-
--- | Core helper for the Proc-returning variants, allowing sudo command injection.
--- Returns an IO Cmd so callers can chain shh operators like |> and &>.
-maybeSudoWithCmd' :: LBS.ByteString -> (Text -> IO Bool) -> Text -> [LBS.ByteString] -> IO Cmd
-maybeSudoWithCmd' sudoCmd needsFn pth args = do
-  useSudo <- needsFn pth
-  if useSudo
-    then pure (exe $ sudoCmd : args)
-    else pure (exe $ "env" : args)
-
-maybeSudo' :: Text -> [LBS.ByteString] -> IO Cmd
-maybeSudo' = maybeSudoWithCmd' "sudo" needsSudo
-
-maybeSudoRead' :: Text -> [LBS.ByteString] -> IO Cmd
-maybeSudoRead' = maybeSudoWithCmd' "sudo" needsSudoRead
-
-
+  c  <- liftIO $ mkPrivCmd sc mode pth args
+  cmd c
 
 -- | Move a file to a timestamped backup, using sudo only if needed.
 mvToBackupAuto :: Text -> WS Text
 mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- maybeSudo path ["mv", T.unpack path, T.unpack backupPath]
+  result <- privCmd WriteAccess path ["mv", T.unpack path, T.unpack backupPath]
   case result of
     Right _ -> do
       putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
@@ -325,13 +303,9 @@ fileContentsCheck path content = do
         else do
           -- Compare using diff (only need read access to target file)
 
-          diffCmd <- liftIO $ maybeSudoRead' path ["diff", "-q", LBS.pack tempFile, LBS.pack (T.unpack path)]
+          sc <- asks (.sudoCmd)
+          diffCmd <- liftIO $ mkPrivCmd sc ReadAccess path ["diff", "-q", tempFile, T.unpack path]
           diffResult <- cmd $ diffCmd &> devNull
-
-          -- useSudo <- liftIO $ needsSudoRead path
-          -- diffResult <- if useSudo
-          --   then cmd (exe "sudo" "diff" "-q" tempFile (T.unpack path) &> devNull)
-          --   else cmd (exe "env" "diff" "-q" tempFile (T.unpack path) &> devNull)
           pure $ isRight diffResult
 
       -- Clean up temp file
@@ -373,13 +347,13 @@ fileContentsFix path content = do
             else pure ""
 
           -- Move temp file to target location (only use sudo if needed)
-          moveResult <- maybeSudo path ["mv", tempFile, T.unpack path]
+          moveResult <- privCmd WriteAccess path ["mv", tempFile, T.unpack path]
           case moveResult of
             Left err -> error $ "Failed to move file to " <> T.unpack path <> ": " <> show err
             Right _ -> pure ()
 
           -- Restore original ownership when sudo was used
-          void $ maybeSudo path ["chown", T.unpack ownerGroup, T.unpack path]
+          void $ privCmd WriteAccess path ["chown", T.unpack ownerGroup, T.unpack path]
           pure $ Just backupPath
 
 class Prop p where
