@@ -21,3 +21,4 @@ properties:
         - { src: npmrc, dot: true, sort: Symlink, dir: false }
         - { src: config/git, dot: true, sort: Symlink, dir: true }
         - { src: config/doom, dot: true, sort: Symlink, dir: true }
+        - { src: gitignore, dot: true, sort: Copy, dir: false }
