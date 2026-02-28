@@ -66,6 +66,7 @@ type WSStack a = ReaderT Settings (StateT WSState IO) a
 data Settings = Settings
   { opts :: Options
   , configuration :: Configuration
+  , sudoCmd :: String  -- ^ Command to use for privilege escalation, e.g. "sudo" or "env" in tests
   }
 
 data Property
@@ -255,6 +256,18 @@ maybeSudo = maybeSudoWithCmd "sudo" needsSudo
 -- | Like maybeSudo but checks read access instead of write access.
 maybeSudoRead :: Text -> [String] -> WS (Either Failure ())
 maybeSudoRead = maybeSudoWithCmd "sudo" needsSudoRead
+
+-- | Like maybeSudo but reads the sudo command from Settings.
+maybeSudoSettings :: Text -> [String] -> WS (Either Failure ())
+maybeSudoSettings pth args = do
+  sc <- asks (.sudoCmd)
+  maybeSudoWithCmd sc needsSudo pth args
+
+-- | Like maybeSudoRead but reads the sudo command from Settings.
+maybeSudoReadSettings :: Text -> [String] -> WS (Either Failure ())
+maybeSudoReadSettings pth args = do
+  sc <- asks (.sudoCmd)
+  maybeSudoWithCmd sc needsSudoRead pth args
 
 
 -- | Core helper for the Proc-returning variants, allowing sudo command injection.
@@ -968,7 +981,7 @@ main = do
   case opts.command of
     Bootstrap cfgPath ws -> do
       cfg <- decodeFileThrow cfgPath :: IO Configuration
-      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings opts cfg) $ unWS $ do
+      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings { opts = opts, configuration = cfg, sudoCmd = "sudo" }) $ unWS $ do
         liftIO $ print cfg
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."

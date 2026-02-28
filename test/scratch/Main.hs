@@ -48,7 +48,7 @@ runWS action = do
         , configRepoBranch = ""
         , properties = []
         }
-  let settings = Settings { opts = opts, configuration = cfg }
+  let settings = Settings { opts = opts, configuration = cfg, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
 
