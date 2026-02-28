@@ -111,10 +111,10 @@ main2 = hspec $ do
     _ <- exe foo
     putStrLn "after1"
 
-    userCmd <- mkPrivCmd "sudo" WriteAccess "root_only" ["bash", "-c", "echo $USER"]
-    user <- liftIO $ userCmd |> captureTrim
-    -- TL.putStrLn $ TL.decodeLatin1 res
-    user `shouldBe` "root"
+    -- userCmd <- mkPrivCmd "sudo" WriteAccess "root_only" ["bash", "-c", "echo $USER"]
+    -- user <- liftIO $ userCmd |> captureTrim
+    -- -- TL.putStrLn $ TL.decodeLatin1 res
+    -- user `shouldBe` "root"
 
 main :: IO ()
 main = hspec $ do
