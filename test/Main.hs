@@ -33,6 +33,7 @@ import Data.Set qualified as Set
 import Shh.Internal (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure, (<<<), toArgs, asArg, displayCommand, Cmd)
 import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 import Data.Either (isRight)
+import qualified SudoSpec
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state
@@ -884,3 +885,6 @@ main = hspec $ do
       result `shouldSatisfy` \case
         Left _  -> True
         Right _ -> False
+
+  describe "sudo functionality" $  do
+    SudoSpec.spec
