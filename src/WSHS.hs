@@ -14,10 +14,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module WSHS (module WSHS, module WSHS.Types, module WSHS.Sudo) where
+module WSHS (module WSHS, module WSHS.Types, module WSHS.Properties.Dotfiles, module WSHS.Sudo) where
 
 import WSHS.Sudo
 import WSHS.Types
+import WSHS.Properties.Dotfiles
 
 import Options.Applicative
 import Options.Applicative qualified as App
@@ -31,9 +32,8 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
 import Data.Maybe (isJust, fromMaybe)
-import GHC.Stack
 import Data.List (intercalate)
-import Shh (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFailure)
+import Shh (exe, devNull, (&>), Failure, captureTrim, (|>))
 import Data.Yaml (decodeFileThrow)
 -- import Data.Maybe (isJust)
 import qualified Data.Set as Set
@@ -49,15 +49,6 @@ import Data.Time.Clock.POSIX (getPOSIXTime)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import System.FilePath (takeDirectory)
-
-putStrLn' :: Text -> WS ()
-putStrLn' t = liftIO $ putStrLn $ T.unpack t
-
-tshow :: Show s => s -> Text
-tshow = T.pack . show
-
-cmd :: MonadIO m => Proc a -> m (Either Failure a)
-cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
 detectOS :: MonadIO m => m OS
 detectOS = do
@@ -84,12 +75,6 @@ which cmdName = do
 hasCmd' :: Text -> WS Bool
 hasCmd' cmdName = isJust <$> which cmdName
 
--- | Expand a path using bash filename expansion (resolves ~, $HOME, etc.)
-expandPath :: MonadIO m => Text -> m Text
-expandPath path = do
-  result <- cmd (exe "bash" "-c" ("echo " <> T.unpack path) |> captureTrim)
-  pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
-
 -- | Ensure a parent directory exists, using sudo only if needed.
 ensureParentDir :: Text -> WS ()
 ensureParentDir path = do
@@ -112,16 +97,6 @@ getOwnerGroup path = do
       case words $ TL.unpack $ TL.decodeUtf8 bytes of
         (_:_:owner:group:_) -> pure $ T.pack owner <> ":" <> T.pack group
         _ -> pure "root:root"
-
-mvToBackup :: Text -> WS ()
-mvToBackup path = do
-  timestamp <- liftIO $ round <$> getPOSIXTime
-  let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
-  case result of
-    Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
-    Left err -> error $ "Failed to move file: " <> show err
-
 
 -- | Run a privilege-escalating command in the WS monad.
 -- Reads the sudo command from Settings; uses AccessMode to choose the
@@ -246,122 +221,6 @@ instance Prop GitTrackHomeDirP where
       Left err -> putStrLn' $ "Failed setting up home dir git tracking: " <> tshow err
 
   dependencies _ = return [IsProp HasGitP]
-
--- | Compute the filesystem diff for a single dotfile.
--- This determines what action (if any) is needed to bring the dotfile to the desired state.
-computeDotfileDiff :: MonadIO m => DotfileConfig -> Text -> Text -> m DotfileDiff
-computeDotfileDiff f src dest = do
-  -- Check if source exists
-  srcExists <- isRight <$> cmd (exe "bash" "-c" $ "test -e " <> T.unpack src)
-  if not srcExists
-    then pure $ DotfileSrcMissing src
-    else do
-      -- Check if dest is a symlink (regardless of whether target exists)
-      isLink <- isRight <$> cmd (exe "bash" "-c" $ "test -L " <> T.unpack dest)
-      -- Check if dest exists (follows symlinks, so broken symlink = False)
-      destExists <- isRight <$> cmd (exe "bash" "-c" $ "test -e " <> T.unpack dest)
-
-      case (isLink, destExists) of
-        (True, False) ->
-          -- Symlink exists but target doesn't = broken symlink
-          pure DotfileBrokenSymlink
-        (_, False) ->
-          -- No dest at all
-          pure DotfileMissing
-        _ -> do
-          -- Dest exists, check if it's correct
-          isCorrect <- checkSingleDotfile f src dest
-          pure $ if isCorrect then DotfileCorrect else DotfileWrong
-
-
--- | Get the destination base directory, defaulting to "~/" if not set
-getDestDir :: DotfilesP -> Text
-getDestDir p = maybe "~/" ensureTrailingSlash p.destDir
-  where
-    ensureTrailingSlash t = if T.isSuffixOf "/" t then t else t <> "/"
-
--- | Compute the full destination path for a dotfile config.
--- If dest is set and is an absolute path (starts with /), use it directly.
--- If dest is set but relative, prepend baseDestDir (dot prefix is ignored).
--- If dest is not set, derive from src with optional dot prefix.
-computeDestPath :: Text -> DotfileConfig -> Text
-computeDestPath baseDestDir f =
-  case f.dest of
-    Just d | T.isPrefixOf "/" d -> d
-    Just d -> baseDestDir <> d  -- dot prefix ignored when dest is explicit
-    Nothing -> baseDestDir <> (bool "" "." f.dot) <> f.src
-
--- | Check if a single dotfile is in the correct state
-checkSingleDotfile :: MonadIO m => DotfileConfig -> Text -> Text -> m Bool
-checkSingleDotfile f src dest = do
-  case f.sort of
-    Symlink -> do
-      -- Check if dest is a symlink pointing to src
-      target <- cmd (exe "readlink" (T.unpack dest) |> captureTrim)
-      pure $ either (const False) (\t -> TL.toStrict (TL.decodeUtf8 t) == src) target
-    Copy -> do
-      -- Ensure dest is not a symlink, and contents match
-      isSymlink <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -L ", T.unpack dest])
-      if isSymlink
-        then pure False  -- Wrong type: should be regular file, not symlink
-        else do
-          diffResult <- cmd (exe "diff" "-rq" (T.unpack src) (T.unpack dest) &> devNull)
-          pure $ isRight diffResult
-
--- | Compute expanded src and dest paths for a dotfile config
-computeDotfilePaths :: MonadIO m => DotfilesP -> DotfileConfig -> m (Text, Text)
-computeDotfilePaths p f = do
-  let baseDestDir = getDestDir p
-  src <- expandPath $ p.srcDir <> "/" <> f.src
-  dest <- expandPath $ computeDestPath baseDestDir f
-  pure (src, dest)
-
--- | Apply the fix for a dotfile based on its diff state.
--- Assumes the diff is not DotfileCorrect or DotfileSrcMissing (caller should handle those).
-applyDotfileFix :: DotfileConfig -> Text -> Text -> DotfileDiff -> WS ()
-applyDotfileFix f src dest diff = do
-  -- Handle any necessary cleanup/backup based on the diff
-  case diff of
-    DotfileBrokenSymlink -> do
-      putStrLn' $ "Removing broken symlink: " <> dest
-      void $ cmd (exe "rm" (T.unpack dest))
-    DotfileWrong -> do
-      putStrLn' $ "Backing up existing file: " <> dest
-      mvToBackup dest
-    _ -> pure ()
-
-  -- Create the dotfile (symlink or copy)
-  case f.sort of
-    Symlink -> do
-      putStrLn' $ "Creating symlink: " <> dest <> " -> " <> src
-      void $ cmd (exe "ln" "-s" (T.unpack src) (T.unpack dest))
-    Copy -> do
-      putStrLn' $ "Copying: " <> src <> " -> " <> dest
-      void $ cmd (exe "cp" "-r" (T.unpack src) (T.unpack dest))
-
-instance Prop DotfilesP where
-  desc _ = "dotfiles management"
-  attrs _ = mempty
-  checker p = do
-    results <- forM p.files $ \f -> do
-      (src, dest) <- computeDotfilePaths p f
-      diff <- computeDotfileDiff f src dest
-      case diff of
-        DotfileSrcMissing path -> error $ "Source file does not exist: " <> T.unpack path
-        DotfileCorrect -> pure True
-        _ -> pure False
-    return $ all id results
-
-  fixer p = do
-    forM_ p.files $ \f -> do
-      (src, dest) <- computeDotfilePaths p f
-      diff <- computeDotfileDiff f src dest
-      case diff of
-        DotfileSrcMissing path -> error $ "Source file does not exist: " <> T.unpack path
-        DotfileCorrect -> pure ()
-        _ -> applyDotfileFix f src dest diff
-
-  dependencies _ = return []
 
 instance Prop BasicSetupP where
   desc _ = "basic setup"
