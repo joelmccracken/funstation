@@ -41,14 +41,7 @@ import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 runWS :: WS a -> IO a
 runWS action = do
   let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
-  let cfg = Configuration
-        { configDir = ""
-        , configRepoUrl = ""
-        , configRepoOrigin = ""
-        , configRepoBranch = ""
-        , properties = []
-        }
-  let settings = Settings { opts = opts, configuration = cfg, sudoCmd = "sudo" }
+  let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
 

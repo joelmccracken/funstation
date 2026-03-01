@@ -1,11 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module WSHS.Properties.Debian where
 
 import WSHS.Types
 import WSHS.Commands
 import Shh (exe, devNull, (&>))
+import GHC.Generics (Generic)
+import Data.Aeson.Types (FromJSON, ToJSON)
+
+data AptUpdateP = AptUpdateP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
 instance Prop AptUpdateP where
   desc _ = "apt package lists updated"

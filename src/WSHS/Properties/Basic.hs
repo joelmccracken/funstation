@@ -1,17 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module WSHS.Properties.Basic where
 
 import WSHS.Types
 import WSHS.Commands
-import WSHS.Properties.Git ()
+import WSHS.Properties.Git
 import Shh (exe)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Either (isRight)
 import Data.List (intercalate)
-import Control.Monad.Reader (asks)
+import GHC.Generics (Generic)
+import Data.Aeson.Types (FromJSON, ToJSON)
+
+data BasicSetupP = BasicSetupP
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+data WSConfigDirP = WSConfigDirP
+  { configDir        :: Text
+  , configRepoUrl    :: Text
+  , configRepoBranch :: Text
+  } deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 instance Prop BasicSetupP where
   desc _ = "basic setup"
@@ -23,21 +36,19 @@ instance Prop BasicSetupP where
 instance Prop WSConfigDirP where
   desc _ = "wshs configuration directory"
   attrs _ = mempty
-  checker _ = do
-    cfg <- asks configuration
-    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d ", T.unpack $ cfg.configDir])
-  fixer _ = do
-    cfg <- asks configuration
+  checker p =
+    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d ", T.unpack p.configDir])
+  fixer p = do
     let cloneCmd =
           intercalate " "
             [ "git clone"
             , "--branch"
-            , T.unpack cfg.configRepoBranch
-            , T.unpack cfg.configRepoUrl
-            , T.unpack cfg.configDir
+            , T.unpack p.configRepoBranch
+            , T.unpack p.configRepoUrl
+            , T.unpack p.configDir
             ]
     result <- cmd (exe "bash" "-c" $ cloneCmd)
     case result of
-      Right _ -> putStrLn' $ "Cloned repository to " <> cfg.configDir
+      Right _ -> putStrLn' $ "Cloned repository to " <> p.configDir
       Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err
   dependencies _ = return [IsProp HasGitP]

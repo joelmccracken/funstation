@@ -1,18 +1,35 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module WSHS.Properties.Git where
 
 import WSHS.Types
 import WSHS.Commands
-import WSHS.Properties.MacOS ()
-import WSHS.Properties.Debian ()
+import WSHS.Properties.MacOS
+import WSHS.Properties.Debian
 import Shh (exe, devNull, (&>))
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Either (isRight)
 import Data.Bool (bool)
 import qualified Data.Map.Strict as Map
+import GHC.Generics (Generic)
+import Data.Aeson.Types (FromJSON, ToJSON)
+
+data GitTrackHomeDirP = GitTrackHomeDirP { gitDir :: Text }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+data HasGitP = HasGitP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+
+data GitMacOSP = GitMacOSP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+
+data GitDebianP = GitDebianP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
 instance Prop GitTrackHomeDirP where
   desc _ = "git track home dir"

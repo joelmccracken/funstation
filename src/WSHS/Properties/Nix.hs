@@ -1,17 +1,35 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module WSHS.Properties.Nix where
 
 import WSHS.Types
 import WSHS.Commands
 import Shh (exe)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Maybe (fromMaybe)
 import Data.Either (isRight)
 import Control.Monad (unless, when)
 import qualified Data.Map.Strict as Map
+import GHC.Generics (Generic)
+import Data.Aeson.Types (FromJSON, ToJSON)
+
+data NixDaemonP = NixDaemonP
+  { version :: Maybe Text      -- ^ Nix version to install, defaults to "2.24.14"
+  , interactive :: Bool        -- ^ If True, allow user to answer installer prompts; if False, pass --yes
+  , nixConf :: Maybe Text      -- ^ Desired contents of /etc/nix/nix.conf (optional)
+  }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+defaultNixVersion :: Text
+defaultNixVersion = "2.24.14"
+
+nixDaemonProfile :: FilePath
+nixDaemonProfile = "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
 
 instance Prop NixDaemonP where
   desc _ = "Nix package manager (daemon mode)"

@@ -1,17 +1,19 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
-module WSHS (module WSHS, module WSHS.Types, module WSHS.Properties.Dotfiles, module WSHS.Sudo, module WSHS.Commands) where
+module WSHS (module WSHS, module WSHS.Types, module WSHS.Configuration, module WSHS.Properties.Dotfiles, module WSHS.Sudo, module WSHS.Commands) where
 
 import WSHS.Sudo
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Configuration
 import WSHS.Properties.Dotfiles
 import WSHS.Properties.Git ()
 import WSHS.Properties.MacOS ()
 import WSHS.Properties.Debian ()
-import WSHS.Properties.Basic ()
+import WSHS.Properties.Basic
 import WSHS.Properties.Nix ()
 
 import Options.Applicative
@@ -121,12 +123,12 @@ main = do
   case opts.command of
     Bootstrap cfgPath ws -> do
       cfg <- decodeFileThrow cfgPath :: IO Configuration
-      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings { opts = opts, configuration = cfg, sudoCmd = "sudo" }) $ unWS $ do
+      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings { opts = opts, sudoCmd = "sudo" }) $ unWS $ do
         liftIO $ print cfg
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
         ensureProperty (IsProp BasicSetupP)
-        ensureProperty (IsProp WSConfigDirP)
+        ensureProperty (IsProp WSConfigDirP { configDir = cfg.configDir, configRepoUrl = cfg.configRepoUrl, configRepoBranch = cfg.configRepoBranch })
         forM_ (getProp <$> cfg.properties) ensureProperty
     Nix NixRestart ->
       restartNixDaemon

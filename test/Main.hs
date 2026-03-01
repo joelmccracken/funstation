@@ -43,14 +43,7 @@ import qualified SudoSpec
 runWS :: WS a -> IO a
 runWS action = do
   let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
-  let cfg = Configuration
-        { configDir = ""
-        , configRepoUrl = ""
-        , configRepoOrigin = ""
-        , configRepoBranch = ""
-        , properties = []
-        }
-  let settings = Settings { opts = opts, configuration = cfg, sudoCmd = "sudo" }
+  let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
 
@@ -58,10 +51,7 @@ runWS action = do
 runWSWith :: String -> WS a -> IO a
 runWSWith sc action = do
   let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
-  let cfg = Configuration
-        { configDir = "", configRepoUrl = "", configRepoOrigin = ""
-        , configRepoBranch = "", properties = [] }
-  let settings = Settings { opts = opts, configuration = cfg, sudoCmd = sc }
+  let settings = Settings { opts = opts, sudoCmd = sc }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
 

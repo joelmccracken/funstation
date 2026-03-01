@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module WSHS.Properties.MacOS where
 
@@ -8,6 +10,14 @@ import WSHS.Commands
 import Shh (exe, devNull, (&>))
 import Data.Either (isRight)
 import Control.Monad (void)
+import GHC.Generics (Generic)
+import Data.Aeson.Types (FromJSON, ToJSON)
+
+data XCodeCLIToolsP = XCodeCLIToolsP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+
+data HomebrewP = HomebrewP
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
 instance Prop XCodeCLIToolsP where
   desc _ = "Xcode CLI Tools"

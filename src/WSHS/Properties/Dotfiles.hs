@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module WSHS.Properties.Dotfiles where
 
@@ -16,6 +18,38 @@ import Data.Bool (bool)
 import Data.Either (isRight)
 import Control.Monad (void, forM_, forM)
 import Control.Monad.IO.Class (MonadIO)
+import GHC.Generics (Generic)
+import Data.Aeson.Types (FromJSON, ToJSON)
+
+data DotfileSort
+  = Symlink
+  | Copy
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+data DotfileConfig = DotfileConfig
+  { src :: Text
+  , dest :: Maybe Text  -- ^ Optional destination path; if absolute, used directly
+  , dot :: Bool
+  , sort :: DotfileSort
+  , dir :: Bool
+  }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+-- | Describes the difference between desired and current filesystem state for a dotfile
+data DotfileDiff
+  = DotfileCorrect              -- ^ Already in the desired state, no action needed
+  | DotfileMissing              -- ^ Destination doesn't exist, needs to be created
+  | DotfileBrokenSymlink        -- ^ Destination is a broken symlink, needs removal and recreation
+  | DotfileWrong                -- ^ Destination exists but has wrong content/type, needs backup and recreation
+  | DotfileSrcMissing Text      -- ^ Error: source file doesn't exist (carries the missing path)
+  deriving (Eq, Show)
+
+data DotfilesP = DotfilesP
+  { srcDir :: Text
+  , destDir :: Maybe Text  -- ^ Destination base directory, defaults to "~/" if Nothing
+  , files :: [DotfileConfig]
+  }
+  deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 -- | Compute the filesystem diff for a single dotfile.
 -- This determines what action (if any) is needed to bring the dotfile to the desired state.
