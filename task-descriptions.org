@@ -1,28 +1,89 @@
 #+title: Task Descriptions
-* Desc: pass sudo passsword optionally via command line
+* DONE desc: pass sudo passsword optionally via command line
 #+begin_src md
-  support providing sudo password via `-A` and the `SUDO_ASKPASS` env var.
-  https://stackoverflow.com/questions/61919931/how-to-pass-password-to-sudo-from-environment-variable-without-prompt-appearing
-  maybe set all this up in the run-in-vm file? have some way to tell it to use -A for sudo?
+  - add a new command line argument `--sudo-password` that expects a password argument and passes it to sudo when its first executed.
+  - support providing sudo password via `-A` and the `SUDO_ASKPASS` env var.
+  - make a temp file. Make this file unreadable by any other users. make it executable. then finally write a brief bash script into the file that prints the password value (no newline!)
+  - invoke the initial `sudo -v`
+    - add the argument `-A` to the sudo command and set the env var `SUDO_ASKPASS` to the path to the above temp file.
+
+  after the initial `sudo -v` is execuated and succeeds, delete password passing file.
+  if this flag is provided, execuate the initial `sudo -v` with whatever j
+  onces this is built, add it to the `run-in-vm.sh` invocation of `wshs`. The passsword
+
+    https://stackoverflow.com/questions/61919931/how-to-pass-password-to-sudo-from-environment-variable-without-prompt-appearing
 #+end_src
-* desc: also support adding nopasswd in sudoers file
-* desc: possibly automatically use sudo if user doesn't have permission
+* DONE desc: possibly automatically use sudo if user doesn't have permission
 #+begin_src md
   add support to the dotfiles so that if the current user does not have
   permissions to modify a given DEST file, the tool will perform the change with
   sudo.
 #+end_src
-* desc: interactive properties
-* desc: document all current properties
-* desc: implement bitwarden secrets system
+* TODO desc: windows support
+* TODO desc: also support adding nopasswd in sudoers file
+* TODO desc: interactive properties
+* TODO desc: document all current properties
+* TODO desc: implement bitwarden secrets system
 - and others?
-* desc: do nix home manager setup
-* desc: homebrew bundle file
-* desc: verbose mode
-* desc: add makefile and commands
+- the dorothy secret system was interesting
+* TODO desc: do nix home manager setup
+* TODO desc: homebrew bundle file
+* TODO desc: verbose mode
+* TODO desc: add makefile and commands
 - cabal build, nix build
-* desc: github actions
-* desc: windows support
-* record/describe setup of vmware fusion VM
+* TODO desc: github actions
+* TODO record/describe setup of vmware fusion VM
 - so most likely, just create a second one and document it
-* desc: switch from yaml to dhall (?)
+* TODO desc: tease apart bash parameter expansion from just running commands
+- have a function that "echo" some string, providihng expansion
+  - have standard env vars set: WS_NAME, WHOAMI
+* TODO desc: switch from yaml to dhall (?)
+* TODO desc: home git status
+status subcommand that invokes git status
+can expand to add more things to be checked
+#+begin_src sh
+GIT_DIR=~/.git-homedir git status
+#+end_src
+- functionality to find a certain property type in config
+  - "user ran wshs status, find property setting"
+* TODO desc: sudo testing functionality
+- add a shell script in local repo to execute instead of sudo for testing
+  I would think something like: it outputs the full command, then arguments from
+  1 to N per line prefixed by the `ARG #:`. finally adding env var, maybe?
+- add ability to pass flags to sudo somehow?
+
+* TODO desc: sudo cmds should use a record of args
+- so something like:
+- set defaults based upon reader type for subsequent override
+#+begin_src haskell
+  type Text = ()
+  data ReadOrWrite = Read | Write
+
+  data SudoArgs =
+    SudoArgs
+    { sudoCmd :: Text
+    , sudoPath :: Text
+    , sudoPerm :: (ReadOrWrite)
+    -- others?
+    }
+
+  -- that defaults thing
+
+  maybeSudo :: SudoArgs -> ()
+  maybeSudo = undefined
+
+  main = do
+    -- calling
+    maybeSudo defaults {
+      sudoPerm = Read,
+      sudoPath = "...whatever"
+      }
+#+end_src
+* scratch
+- add manual test suite, record logs of test results
+  - i.e. save record that locally ran nix test in VM
+    - results of run, logs, repo status
+- move withTempSrcAndDest to test utils
+  - get tests to stop writing to PWD, annoying
+- lots of functions/types to move around ideally
+- tests could def use some helpers to make them clearer
