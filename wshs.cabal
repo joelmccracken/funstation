@@ -59,8 +59,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  WSHS, WSHS.Sudo, WSHS.Types, WSHS.Types.Configuration, WSHS.Properties.Dotfiles
-   -- , WSHS.Commands
+    exposed-modules:  WSHS, WSHS.Sudo, WSHS.Types, WSHS.Types.Configuration, WSHS.Properties.Dotfiles, WSHS.Commands
 
     -- Modules included in this library but not exported.
     -- other-modules:
