@@ -6,6 +6,7 @@
 module WSHS.Properties.Dotfiles where
 
 import WSHS.Types
+import WSHS.Commands
 import Shh (exe, devNull, (&>), captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T

@@ -1,23 +1,15 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DeriveAnyClass    #-}
 {-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ImpredicativeTypes #-}
 
 module WSHS.Types where
 
 import Data.Text (Text)
-import Data.Text qualified as T
-import Data.Text.Lazy qualified as TL
-import Data.Text.Lazy.Encoding qualified as TL
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import Control.Monad.IO.Class
@@ -25,9 +17,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Data.Aeson.Types hiding (Parser, Options)
 import GHC.Generics (Generic)
-import GHC.Stack (withFrozenCallStack)
-import Shh (exe, Proc, Failure, captureTrim, (|>), tryFailure)
-import Data.Time.Clock.POSIX (getPOSIXTime)
 
 -- Monad stack
 
@@ -217,29 +206,3 @@ defaultNixVersion = "2.24.14"
 
 nixDaemonProfile :: FilePath
 nixDaemonProfile = "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
-
--- Primitive WS utilities
-
-tshow :: Show s => s -> Text
-tshow = T.pack . show
-
-cmd :: MonadIO m => Proc a -> m (Either Failure a)
-cmd c = liftIO $ tryFailure $ withFrozenCallStack c
-
-putStrLn' :: Text -> WS ()
-putStrLn' t = liftIO $ putStrLn $ T.unpack t
-
--- | Expand a path using bash filename expansion (resolves ~, $HOME, etc.)
-expandPath :: MonadIO m => Text -> m Text
-expandPath path = do
-  result <- cmd (exe "bash" "-c" ("echo " <> T.unpack path) |> captureTrim)
-  pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
-
-mvToBackup :: Text -> WS ()
-mvToBackup path = do
-  timestamp <- liftIO $ round <$> getPOSIXTime
-  let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
-  case result of
-    Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
-    Left err -> error $ "Failed to move file: " <> show err

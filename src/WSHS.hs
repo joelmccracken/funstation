@@ -1,17 +1,5 @@
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE DerivingStrategies    #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ExtendedDefaultRules #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 
 module WSHS (module WSHS, module WSHS.Types, module WSHS.Properties.Dotfiles, module WSHS.Sudo, module WSHS.Commands) where
@@ -20,245 +8,23 @@ import WSHS.Sudo
 import WSHS.Types
 import WSHS.Commands
 import WSHS.Properties.Dotfiles
+import WSHS.Properties.Git ()
+import WSHS.Properties.MacOS ()
+import WSHS.Properties.Debian ()
+import WSHS.Properties.Basic ()
+import WSHS.Properties.Nix ()
 
 import Options.Applicative
 import Options.Applicative qualified as App
 import Data.Text qualified as T
-import Data.Either (isRight)
-import Data.Maybe (fromMaybe)
-import Data.List (intercalate)
-import Shh (exe, devNull, (&>))
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
-import Data.Bool (bool)
-import Control.Monad (void, forM_, unless, when)
+import Control.Monad (void, forM_)
 import Control.Concurrent (killThread)
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Reader
-import qualified Data.Map.Strict as Map
 import Data.Set (Set)
-
-instance Prop GitTrackHomeDirP where
-  desc _ = "git track home dir"
-  attrs p = Map.fromList [("gitDir", gitDir p)]
-  checker p =
-    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d $HOME/", T.unpack $ gitDir p])
-  fixer p = do
-    let cmdtxt = [ "export GIT_DIR='"
-                 , T.unpack $ gitDir p
-                 , "'; "
-                 , concat [ "("
-                          , "cd $HOME; "
-                          , "git init .; "
-                          , "git config --local --get-all core.bare true >/dev/null && "
-                          , "git config --local --replace-all core.bare false true "
-                          , ")"
-                          ]
-                 ]
-    result <- cmd (exe "bash" "-c" $ concat cmdtxt )
-    case result of
-      Right _ -> putStrLn' "home dir git tracking setup successfully"
-      Left err -> putStrLn' $ "Failed setting up home dir git tracking: " <> tshow err
-
-  dependencies _ = return [IsProp HasGitP]
-
-instance Prop BasicSetupP where
-  desc _ = "basic setup"
-  attrs _ = mempty
-  checker _ = return True -- dummy prop, wrapper for dependencies
-  fixer _ = return () -- all action in dependencies
-  dependencies _ = return [ (IsProp HasGitP) ]
-
-instance Prop GitMacOSP where
-  desc _ = "git (macOS via Homebrew)"
-  attrs _ = mempty
-  checker _ = hasCmd' "git"
-  fixer _ = do
-    result <- cmd (exe "brew" "install" "git" &> devNull)
-    case result of
-      Right _ -> putStrLn' "Git installed successfully"
-      Left err -> putStrLn' $ "Failed to install git: " <> tshow err
-  dependencies _ = return [(IsProp HomebrewP)]
-
-
-instance Prop GitDebianP where
-  desc _ = "git (Debian via apt)"
-  attrs _ = mempty
-  checker _ = hasCmd' "git"
-  fixer _ = do
-    result <- cmd(exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
-    case result of
-      Right _ -> putStrLn' "Git installed successfully"
-      Left err -> putStrLn' $ "Failed to install git: " <> tshow err
-  dependencies _ = do
-    hasCmd' "git" >>= bool (return [(IsProp AptUpdateP)]) (return [])
-
-instance Prop HasGitP where
-  desc _ = "has command `git` installed"
-  attrs _ = mempty
-  checker _ = hasCmd' "git"
-  dependencies _ = do
-    os <- detectOS
-    case os of
-      MacOS -> return [(IsProp HomebrewP)]
-      Debian -> return [(IsProp AptUpdateP)]
-      Unknown -> error "error: Unknown OS, unable to install git"
-  fixer _ = do
-    os <- detectOS
-    case os of
-      Unknown -> error "error: Unknown OS, unable to install git"
-      MacOS -> do
-        result <- cmd (exe "brew" "install" "git" &> devNull)
-        case result of
-          Right _ -> putStrLn' "Git installed successfully"
-          Left err -> error $ "Failed to install git: " ++ show err
-      Debian -> do
-        result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
-        case result of
-          Right _ -> putStrLn' "Git installed successfully"
-          Left err -> error $ "Failed to install git: " ++ show err
-
-instance Prop XCodeCLIToolsP where
-  desc _ = "Xcode CLI Tools"
-  attrs _ = mempty
-  checker _ = isRight <$> cmd (exe "pkgutil" "--pkg-info=com.apple.pkg.CLTools_Executables" &> devNull)
-  fixer _ = do
-      putStrLn' "Installing Xcode CLI Tools..."
-
-      -- Create marker file that triggers CLT in softwareupdate list
-      void $ cmd (exe "touch" "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress")
-
-      -- Find and install the CLT package
-      let findAndInstall = "softwareupdate -i \"$(softwareupdate -l 2>&1 | grep -o 'Command Line Tools for Xcode-[0-9.]*' | head -1)\""
-      result <- cmd (exe "bash" "-c" findAndInstall)
-
-      -- Clean up marker
-      -- TODO bracket to clean up
-      void $ cmd (exe "rm" "-f" "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress")
-
-      case result of
-        Left err -> error $ "Failed to install Xcode CLI tools: " <> show err
-        Right _ -> do
-          putStrLn' "Xcode CLI tools installed successfully"
-
-  dependencies _ = return []
-
-instance Prop HomebrewP where
-  desc _ = "homebrew package manager for macOS"
-  attrs _ = mempty
-  checker _ = hasCmd' "brew"
-  fixer _ = do
-    result <- cmd (exe "bash" "-c" "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  &> devNull)
-    case result of
-      Right _ -> putStrLn' "Homebrew installed successfully"
-      Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
-  dependencies _ = return [ (IsProp XCodeCLIToolsP) ]
-
-instance Prop AptUpdateP where
-  desc _ = "apt package lists updated"
-  attrs _ = mempty
-  checker _ = return False  -- Always run update to be safe
-  fixer _ = do
-   result <- cmd (exe "sudo" "apt-get" "update" &> devNull)
-   case result of
-     Right _ -> putStrLn' "apt package sets updated successfully"
-     Left err -> putStrLn' $ "Failed to update apt: " <> tshow err
-  dependencies _ = return []
-
-instance Prop WSConfigDirP where
-  desc _ = "wshs configuration directory"
-  attrs _ = mempty
-  checker _ = do
-    cfg <- asks configuration
-    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d ", T.unpack $ cfg.configDir])
-  fixer _ = do
-    cfg <- asks configuration
-    let cloneCmd =
-          intercalate " "
-            [ "git clone"
-            , "--branch"
-            , T.unpack cfg.configRepoBranch
-            , T.unpack cfg.configRepoUrl
-            , T.unpack cfg.configDir
-            ]
-    result <- cmd (exe "bash" "-c" $ cloneCmd)
-    case result of
-      Right _ -> putStrLn' $ "Cloned repository to " <> cfg.configDir
-      Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err
-  dependencies _ = return [IsProp HasGitP]
-
-instance Prop NixDaemonP where
-  desc _ = "Nix package manager (daemon mode)"
-  attrs p = Map.fromList
-    [ ("version", fromMaybe defaultNixVersion p.version)
-    , ("interactive", tshow p.interactive)
-    ]
-  checker p = do
-    nixInstalled <- hasCmd' "nix"
-    if not nixInstalled
-      then return False
-      else case p.nixConf of
-        Nothing -> return True  -- No config specified, nix installed = good
-        Just desiredConf -> do
-          let nixConfPath = "/etc/nix/nix.conf"
-          fileContentsCheck nixConfPath desiredConf
-  fixer p = do
-    -- Check if Nix is already installed
-    nixInstalled <- hasCmd' "nix"
-
-    if nixInstalled
-      then putStrLn' "Nix already installed, checking configuration..."
-      else installNix
-
-    -- Manage nix.conf if specified (runs whether or not we just installed)
-    updateNixConf
-
-    putStrLn' "Nix daemon setup complete."
-
-    where
-      installNix :: WS ()
-      installNix = do
-        let ver = fromMaybe defaultNixVersion p.version
-        let installerUrl = "https://releases.nixos.org/nix/nix-" <> ver <> "/install"
-        let yesFlag = if p.interactive then "" else " --yes"
-
-        putStrLn' $ "Installing Nix " <> ver <> "..."
-
-        let installCmd = "curl -L " <> T.unpack installerUrl <> " | sh -s -- --daemon" <> T.unpack yesFlag
-        result <- cmd (exe "bash" "-c" installCmd)
-        case result of
-          Left err -> error $ "Nix installation failed: " <> show err
-          Right _ -> pure ()
-
-        -- Verify profile exists
-        profileExists <- isRight <$> cmd (exe "test" "-e" nixDaemonProfile)
-        unless profileExists $
-          error $ "Nix installed, but cannot find profile file: " <> nixDaemonProfile
-
-        putStrLn' ""
-        putStrLn' "Nix installed. Add the following to your shell profile:"
-        putStrLn' $ "  . " <> T.pack nixDaemonProfile
-        putStrLn' ""
-
-        restartNixDaemon
-
-      updateNixConf :: WS ()
-      updateNixConf = case p.nixConf of
-        Nothing -> pure ()
-        Just desiredConf -> do
-          let nixConfPath = "/etc/nix/nix.conf"
-          result <- fileContentsFix nixConfPath desiredConf
-          case result of
-            Nothing -> putStrLn' "  nix.conf already has correct contents"
-            Just backupPath -> do
-              putStrLn' $ "  Updated " <> nixConfPath
-              when (backupPath /= "") $
-                putStrLn' $ "  (backed up original to " <> backupPath <> ")"
-              -- Restart daemon since config changed
-              restartNixDaemon
-
-  dependencies _ = return []
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p

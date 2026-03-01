@@ -17,7 +17,8 @@ import Control.Monad (void, unless)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Shh (exe, devNull, (&>), captureTrim, (|>), Failure)
+import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
+import GHC.Stack (withFrozenCallStack)
 import WSHS.Types
 import WSHS.Sudo
 
@@ -167,6 +168,32 @@ fileContentsFix path content = do
           -- Restore original ownership when sudo was used
           void $ privCmd WriteAccess path ["chown", T.unpack ownerGroup, T.unpack path]
           pure $ Just backupPath
+
+-- Primitive WS utilities
+
+tshow :: Show s => s -> Text
+tshow = T.pack . show
+
+cmd :: MonadIO m => Proc a -> m (Either Failure a)
+cmd c = liftIO $ tryFailure $ withFrozenCallStack c
+
+putStrLn' :: Text -> WS ()
+putStrLn' t = liftIO $ putStrLn $ T.unpack t
+
+-- | Expand a path using bash filename expansion (resolves ~, $HOME, etc.)
+expandPath :: MonadIO m => Text -> m Text
+expandPath path = do
+  result <- cmd (exe "bash" "-c" ("echo " <> T.unpack path) |> captureTrim)
+  pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
+
+mvToBackup :: Text -> WS ()
+mvToBackup path = do
+  timestamp <- liftIO $ round <$> getPOSIXTime
+  let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
+  result <- cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
+  case result of
+    Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
+    Left err -> error $ "Failed to move file: " <> show err
 
 -- | Restart the Nix daemon (OS-aware)
 restartNixDaemon :: MonadIO m => m ()
