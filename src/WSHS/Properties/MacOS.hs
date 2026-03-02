@@ -69,7 +69,7 @@ instance Prop HomebrewBundleP where
     brewInstalled <- hasCmd' "brew"
     if not brewInstalled
       then return False
-      else isRight <$> cmd (exe "brew" "bundle" "check" ("--file=" <> T.unpack p.brewfile) &> devNull)
+      else isRight <$> cmd (exe "brew" "bundle" "check" "--no-upgrade" ("--file=" <> T.unpack p.brewfile) &> devNull)
   fixer p = do
     result <- cmd (exe "brew" "bundle" "install" ("--file=" <> T.unpack p.brewfile))
     case result of
