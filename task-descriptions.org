@@ -19,6 +19,8 @@
   permissions to modify a given DEST file, the tool will perform the change with
   sudo.
 #+end_src
+* DONE record/describe setup of vmware fusion VM
+- so most likely, just create a second one and document it
 * TODO desc: windows support
 * TODO desc: also support adding nopasswd in sudoers file
 * TODO desc: interactive properties
@@ -27,13 +29,54 @@
 - and others?
 - the dorothy secret system was interesting
 * TODO desc: do nix home manager setup
+Create a new property: home manager setup
+requires nix package manager to be set up
+property should have the following params:
+- dir: sets the directory for building home manager
+#+begin_src md
+  Create a new property: home manager setup
+  requires nix package manager to be set up
+  property should have the following params:
+  - dir: sets the directory for building home manager
+
+  flake output name: the `$flake_out` name should be
+  ```
+  echo -n ".#homeConfigurations.\"$(whoami)@${workstationName}\".activationPackage"
+  ```
+  so, it literally woudl be something like:
+  - `.#homeConfigurations."joelmccracken@glamdring".activationPackage`
+  use the current username and the host name set on the commandline from bootstrap command
+  # checker
+  checking if the home mangaer prop needs to be fixed involves:
+  - can the `home-manager` and executable be located in path?
+  - from within the `dir` setting, run
+    `nix build --json --dry-run  -v -L "$flake_out" --show-trace`
+  - this command output json. The `out` property contains the path to the build of the the flake.
+
+  if the home-manager command is found, and this `out` points to a path that exists on fhe filesysem, then
+  this property is good and does not need to be fixed
+  # fixer
+  to "fix" this property
+  - cd to the directory
+  - run `nix -v -L --show-trace run "${flake_out}"`
+    - the `$flake_out` value is the same one discussed before
+  very similar to
+
+
+  # Closing
+
+  Follow patterns established in the other code.
+
+  before starting any work, create a plan file at PLAN_homemanager.md
+
+  What questions do you have for me?
+
+#+end_src
 * TODO desc: homebrew bundle file
 * TODO desc: verbose mode
 * TODO desc: add makefile and commands
 - cabal build, nix build
 * TODO desc: github actions
-* TODO record/describe setup of vmware fusion VM
-- so most likely, just create a second one and document it
 * TODO desc: tease apart bash parameter expansion from just running commands
 - have a function that "echo" some string, providihng expansion
   - have standard env vars set: WS_NAME, WHOAMI
@@ -46,12 +89,38 @@ GIT_DIR=~/.git-homedir git status
 #+end_src
 - functionality to find a certain property type in config
   - "user ran wshs status, find property setting"
+
+create a `wshs status` command. Eventually, the goal is to give you a quick
+overview of the state of your system.
+
+But right now, lets just do this: if the config is using a `GitTrackHomeDirP`
+property. run `git status` from the homeo dir with
+
+#+begin_src md
+
+status subcommand that invokes git status
+can expand to add more things to be checked
+#+begin_src sh
+GIT_DIR=~/.git-homedir git status
+#+end_src
+- functionality to find a certain property type in config
+  - "user ran wshs status, find property setting"
+
+create a `wshs status` command. Eventually, the goal is to give you a quick
+overview of the state of your system.
+
+But right now, lets just do this: show the status of the user's home dir,
+assuming they are using the `GitTrackHomeDirP` property.
+
+run `git status` from the home dir with the
+`GIT_DIR=~/.git-homedir` environment variable set to the dir from params.
+
+#+end_src
 * TODO desc: sudo testing functionality
 - add a shell script in local repo to execute instead of sudo for testing
   I would think something like: it outputs the full command, then arguments from
   1 to N per line prefixed by the `ARG #:`. finally adding env var, maybe?
 - add ability to pass flags to sudo somehow?
-
 * TODO desc: sudo cmds should use a record of args
 - so something like:
 - set defaults based upon reader type for subsequent override

@@ -700,3 +700,6 @@ Enabling Shared Folders with Fusion on a Apple host
   - I _think_ this is basically flagging the edit of fstab. going to try
     pre-enabling full disk access
   - done; we'll see if the dialog still bothers me
+- SUCCESS. the entire basic run of wshs bootstrap proceeded without issue
+- next time, perhaps try disabling SIP, adding the required permissions via a
+  cli sqlite tool, and then reenabling SIP
