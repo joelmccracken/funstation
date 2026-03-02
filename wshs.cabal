@@ -51,6 +51,11 @@ extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
 
 
+flag scratch
+    description: Build and run the wshs-scratch test suite
+    default:     False
+    manual:      True
+
 common warnings
     ghc-options: -Wall -Wno-type-defaults
 
@@ -158,9 +163,18 @@ test-suite wshs-test
         bytestring,
         wshs
 
+
+
+-- Skipped by default; to run:
+--   cabal test -f scratch
+-- or
+--   cabal test --flags=scratch
 test-suite wshs-scratch
     -- Import common warning flags.
     -- import:           warnings
+
+    if !flag(scratch)
+        buildable: False
 
     -- Base language which the package is written in.
     default-language: GHC2021

@@ -9,3 +9,43 @@ Currently, this tool is heavily work-in-progress, but the eventual goal is:
   - note historic version in bash ("ws"), and haskell being chosen
 - has various "properties", expects a yaml file that declares the expected
   workstation configuration.
+
+* build, test, run
+
+** from within a nix develop session
+run with
+#+begin_src sh
+  cabal build && cabal run -- wshs bootstrap ./config.yaml glamdring
+#+end_src
+
+test with
+
+#+begin_src sh
+  cabal test
+  cabal test wshs-scratch
+-- Skipped by default; to run:
+--   cabal test -f scratch
+-- or
+--   cabal test --flags=scratch
+#+end_src
+
+to run the "scratch" suite:
+
+#+begin_src sh
+  cabal test -f scratch wshs-scratch
+  cabal test --flags=scratch wshs-scratch
+#+end_src
+** outside  of a nix develop session
+
+build the nix package (e.g. build the version thats statically linked)
+
+#+begin_src
+  nix build  # output will be at `result/bin/wshs`
+#+end_src
+
+test the build in a VM (assumes setup handled, TODO transfer setup process from
+notes.org)
+
+#+begin_src sh
+  bash test/vm/run-in-vm.sh
+#+end_src
