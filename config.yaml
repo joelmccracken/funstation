@@ -22,3 +22,9 @@ properties:
         - { src: config/git, dot: true, sort: Symlink, dir: true }
         - { src: config/doom, dot: true, sort: Symlink, dir: true }
         - { src: gitignore, dot: true, sort: Copy, dir: false }
+  - type: NixDaemon
+    params:
+      interactive: False
+  - type: HomeManager
+    params:
+      dir: "~/.config/wshs/nix"
