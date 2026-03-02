@@ -15,6 +15,7 @@ import WSHS.Properties.MacOS ()
 import WSHS.Properties.Debian ()
 import WSHS.Properties.Basic
 import WSHS.Properties.Nix ()
+import WSHS.Properties.HomeManager ()
 
 import Options.Applicative
 import Options.Applicative qualified as App
@@ -32,6 +33,7 @@ getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
 getProp (Dotfiles p) = IsProp p
 getProp (NixDaemon p) = IsProp p
+getProp (HomeManager p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = Bootstrap
