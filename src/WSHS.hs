@@ -34,6 +34,7 @@ getProp (GitHomeDir p) = IsProp p
 getProp (Dotfiles p) = IsProp p
 getProp (NixDaemon p) = IsProp p
 getProp (HomeManager p) = IsProp p
+getProp (HomebrewBundle p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = Bootstrap

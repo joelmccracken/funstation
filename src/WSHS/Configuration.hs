@@ -4,19 +4,21 @@
 
 module WSHS.Configuration where
 
-import WSHS.Properties.Git        (GitTrackHomeDirP)
-import WSHS.Properties.Dotfiles   (DotfilesP)
-import WSHS.Properties.Nix        (NixDaemonP)
+import WSHS.Properties.Git         (GitTrackHomeDirP)
+import WSHS.Properties.Dotfiles    (DotfilesP)
+import WSHS.Properties.Nix         (NixDaemonP)
 import WSHS.Properties.HomeManager (HomeManagerP)
+import WSHS.Properties.MacOS       (HomebrewBundleP)
 import Data.Aeson.Types hiding (Parser, Options)
 import GHC.Generics (Generic)
 import Data.Text (Text)
 
 data Property
-  = GitHomeDir  GitTrackHomeDirP
-  | Dotfiles    DotfilesP
-  | NixDaemon   NixDaemonP
-  | HomeManager HomeManagerP
+  = GitHomeDir      GitTrackHomeDirP
+  | Dotfiles        DotfilesP
+  | NixDaemon       NixDaemonP
+  | HomeManager     HomeManagerP
+  | HomebrewBundle  HomebrewBundleP
   deriving (Show, Generic)
 
 instance ToJSON Property where

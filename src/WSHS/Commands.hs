@@ -14,6 +14,7 @@ import Data.Either (isRight)
 import Data.Maybe (isJust)
 import System.FilePath (takeDirectory)
 import Control.Monad (void, unless)
+import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
@@ -208,3 +209,4 @@ restartNixDaemon = do
       liftIO $ putStrLn "Restarting Nix daemon (Debian)..."
       void $ cmd (exe "sudo" "systemctl" "restart" "nix-daemon.service")
     Unknown -> error "Cannot restart nix daemon: unknown OS"
+  liftIO $ threadDelay 5000000
