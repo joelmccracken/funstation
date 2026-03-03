@@ -16,6 +16,7 @@ import WSHS.Properties.Debian ()
 import WSHS.Properties.Basic
 import WSHS.Properties.Nix ()
 import WSHS.Properties.HomeManager ()
+import WSHS.Properties.BitwardenSecrets ()
 
 import Options.Applicative
 import Options.Applicative qualified as App
@@ -35,6 +36,7 @@ getProp (Dotfiles p) = IsProp p
 getProp (NixDaemon p) = IsProp p
 getProp (HomeManager p) = IsProp p
 getProp (HomebrewBundle p) = IsProp p
+getProp (BitwardenSecrets p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = Bootstrap

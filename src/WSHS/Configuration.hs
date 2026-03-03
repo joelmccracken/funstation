@@ -9,6 +9,7 @@ import WSHS.Properties.Dotfiles    (DotfilesP)
 import WSHS.Properties.Nix         (NixDaemonP)
 import WSHS.Properties.HomeManager (HomeManagerP)
 import WSHS.Properties.MacOS       (HomebrewBundleP)
+import WSHS.Properties.BitwardenSecrets (BitwardenSecretsP)
 import Data.Aeson.Types hiding (Parser, Options)
 import GHC.Generics (Generic)
 import Data.Text (Text)
@@ -18,7 +19,8 @@ data Property
   | Dotfiles        DotfilesP
   | NixDaemon       NixDaemonP
   | HomeManager     HomeManagerP
-  | HomebrewBundle  HomebrewBundleP
+  | HomebrewBundle      HomebrewBundleP
+  | BitwardenSecrets    BitwardenSecretsP
   deriving (Show, Generic)
 
 instance ToJSON Property where

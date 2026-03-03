@@ -68,7 +68,7 @@ library
                       WSHS.Configuration,
                       WSHS.Properties.Dotfiles, WSHS.Properties.Git, WSHS.Properties.MacOS,
                       WSHS.Properties.Debian, WSHS.Properties.Basic, WSHS.Properties.Nix,
-                      WSHS.Properties.HomeManager
+                      WSHS.Properties.HomeManager, WSHS.Properties.BitwardenSecrets
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -89,7 +89,8 @@ library
         path,
         time,
         containers,
-        filepath
+        filepath,
+        directory
 
     -- Directories containing source files.
     hs-source-dirs:   src

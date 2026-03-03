@@ -38,3 +38,6 @@ properties:
   - type: HomebrewBundle
     params:
       brewfile: "~/.config/wshs/Brewfile"
+  - type: BitwardenSecrets
+    params:
+      syncIntervalDays: 7
