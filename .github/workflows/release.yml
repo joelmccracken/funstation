@@ -1,0 +1,59 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  build-x86_64:
+    name: Build (x86_64-darwin)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v14
+      - name: Build
+        run: nix build --accept-flake-config
+      - name: Copy binary
+        run: cp result/bin/wshs wshs-x86_64-darwin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wshs-x86_64-darwin
+          path: wshs-x86_64-darwin
+
+  build-aarch64:
+    name: Build (aarch64-darwin)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v14
+      - name: Build
+        run: nix build --accept-flake-config
+      - name: Copy binary
+        run: cp result/bin/wshs wshs-aarch64-darwin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wshs-aarch64-darwin
+          path: wshs-aarch64-darwin
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build-x86_64, build-aarch64]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wshs-x86_64-darwin
+      - uses: actions/download-artifact@v4
+        with:
+          name: wshs-aarch64-darwin
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build (master)
+          prerelease: true
+          files: |
+            wshs-x86_64-darwin
+            wshs-aarch64-darwin
