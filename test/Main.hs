@@ -369,6 +369,16 @@ main = hspec $ do
         result <- expandPath "/usr/local/bin"
         result `shouldBe` "/usr/local/bin"
 
+      it "expands $HOME to home directory" $ do
+        result <- expandPath "$HOME"
+        result `shouldSatisfy` T.isPrefixOf "/"
+        result `shouldSatisfy` (not . T.isInfixOf "$")
+
+      it "expands $HOME in path" $ do
+        result <- expandPath "$HOME/foo/bar"
+        result `shouldSatisfy` T.isPrefixOf "/"
+        result `shouldSatisfy` T.isSuffixOf "/foo/bar"
+
     describe "broken symlink handling" $ do
       it "detects broken symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"

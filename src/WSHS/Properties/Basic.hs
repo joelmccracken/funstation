@@ -13,7 +13,6 @@ import Shh (exe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Either (isRight)
-import Data.List (intercalate)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
@@ -36,18 +35,12 @@ instance Prop BasicSetupP where
 instance Prop WSConfigDirP where
   desc _ = "wshs configuration directory"
   attrs _ = mempty
-  checker p =
-    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d ", T.unpack p.configDir])
+  checker p = do
+    expandedDir <- expandPath p.configDir
+    isRight <$> cmd (exe "test" "-d" (T.unpack expandedDir))
   fixer p = do
-    let cloneCmd =
-          intercalate " "
-            [ "git clone"
-            , "--branch"
-            , T.unpack p.configRepoBranch
-            , T.unpack p.configRepoUrl
-            , T.unpack p.configDir
-            ]
-    result <- cmd (exe "bash" "-c" $ cloneCmd)
+    expandedDir <- expandPath p.configDir
+    result <- cmd (exe "git" "clone" "--branch" (T.unpack p.configRepoBranch) (T.unpack p.configRepoUrl) (T.unpack expandedDir))
     case result of
       Right _ -> putStrLn' $ "Cloned repository to " <> p.configDir
       Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err

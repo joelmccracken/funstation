@@ -34,11 +34,13 @@ data GitDebianP = GitDebianP
 instance Prop GitTrackHomeDirP where
   desc _ = "git track home dir"
   attrs p = Map.fromList [("gitDir", gitDir p)]
-  checker p =
-    isRight <$> cmd (exe "bash" "-c" $ concat ["test -d $HOME/", T.unpack $ gitDir p])
+  checker p = do
+    expandedGitDir <- expandPath $ "$HOME/" <> gitDir p
+    isRight <$> cmd (exe "test" "-d" (T.unpack expandedGitDir))
   fixer p = do
+    expandedGitDir <- expandPath $ gitDir p
     let cmdtxt = [ "export GIT_DIR='"
-                 , T.unpack $ gitDir p
+                 , T.unpack expandedGitDir
                  , "'; "
                  , concat [ "("
                           , "cd $HOME; "

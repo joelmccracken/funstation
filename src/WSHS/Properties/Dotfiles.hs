@@ -56,14 +56,14 @@ data DotfilesP = DotfilesP
 computeDotfileDiff :: MonadIO m => DotfileConfig -> Text -> Text -> m DotfileDiff
 computeDotfileDiff f src dest = do
   -- Check if source exists
-  srcExists <- isRight <$> cmd (exe "bash" "-c" $ "test -e " <> T.unpack src)
+  srcExists <- isRight <$> cmd (exe "test" "-e" (T.unpack src))
   if not srcExists
     then pure $ DotfileSrcMissing src
     else do
       -- Check if dest is a symlink (regardless of whether target exists)
-      isLink <- isRight <$> cmd (exe "bash" "-c" $ "test -L " <> T.unpack dest)
+      isLink <- isRight <$> cmd (exe "test" "-L" (T.unpack dest))
       -- Check if dest exists (follows symlinks, so broken symlink = False)
-      destExists <- isRight <$> cmd (exe "bash" "-c" $ "test -e " <> T.unpack dest)
+      destExists <- isRight <$> cmd (exe "test" "-e" (T.unpack dest))
 
       case (isLink, destExists) of
         (True, False) ->
@@ -105,7 +105,7 @@ checkSingleDotfile f src dest = do
       pure $ either (const False) (\t -> TL.toStrict (TL.decodeUtf8 t) == src) target
     Copy -> do
       -- Ensure dest is not a symlink, and contents match
-      isSymlink <- isRight <$> cmd (exe "bash" "-c" $ concat ["test -L ", T.unpack dest])
+      isSymlink <- isRight <$> cmd (exe "test" "-L" (T.unpack dest))
       if isSymlink
         then pure False  -- Wrong type: should be regular file, not symlink
         else do

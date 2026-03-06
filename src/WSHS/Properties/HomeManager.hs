@@ -57,7 +57,8 @@ instance Prop HomeManagerP where
       else do
         ws <- getWorkstation
         flakeOut <- liftIO $ mkFlakeOut ws
-        let buildCmd = "cd " <> T.unpack p.dir
+        expandedDir <- expandPath p.dir
+        let buildCmd = "cd " <> T.unpack expandedDir
                     <> " && nix build --json --dry-run -v -L "
                     <> T.unpack flakeOut
                     <> " --show-trace"
@@ -75,7 +76,8 @@ instance Prop HomeManagerP where
   fixer p = do
     ws <- getWorkstation
     flakeOut <- liftIO $ mkFlakeOut ws
-    let runCmd = "cd " <> T.unpack p.dir
+    expandedDir <- expandPath p.dir
+    let runCmd = "cd " <> T.unpack expandedDir
               <> " && nix -v -L --show-trace run "
               <> T.unpack flakeOut
     result <- cmd (exe "bash" "-c" runCmd)
