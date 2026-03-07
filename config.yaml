@@ -1,7 +1,7 @@
 configDir: "~/.config/wshs"
 configRepoUrl: "https://github.com/joelmccracken/dotfiles"
 configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
-configRepoBranch: "wshs"
+configRepoBranch: "master"
 workstations:
   - workstationName: "aeglos"
 properties:
