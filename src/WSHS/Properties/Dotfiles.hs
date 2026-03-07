@@ -105,7 +105,7 @@ checkSingleDotfile f src dest = do
       pure $ either (const False) (\t -> TL.toStrict (TL.decodeUtf8 t) == src) target
     Copy -> do
       -- Ensure dest is not a symlink, and contents match
-      isSymlink <- isRight <$> cmd (exe "test" "-L" (T.unpack dest))
+      isSymlink <- isRight <$> cmd (exe ["test", "-L", (T.unpack dest)])
       if isSymlink
         then pure False  -- Wrong type: should be regular file, not symlink
         else do

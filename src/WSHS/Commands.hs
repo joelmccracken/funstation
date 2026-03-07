@@ -11,6 +11,8 @@ import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
+-- import Data.ByteString qualified as BS
+-- import Data.ByteString.UTF8 qualified as BS
 import Data.Maybe (isJust)
 import System.FilePath (takeDirectory)
 import Control.Monad (void, unless)
@@ -124,7 +126,7 @@ fileContentsCheck path content = do
 
       -- Clean up temp file
       -- TODO bracket to clean up
-      void $ cmd (exe "rm" "-f" tempFile)
+      void $ cmd $ exe ["rm", "-f", tempFile]
 
       pure result
 
