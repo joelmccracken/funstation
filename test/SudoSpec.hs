@@ -9,7 +9,7 @@ import Data.Text qualified as T
 import System.IO.Temp (withSystemTempDirectory)
 import System.FilePath ((</>))
 import System.Posix.Files (setFileMode)
-import Shh.Internal (captureTrim, (|>))
+import Shh.Internal (exe, captureTrim, (|>))
 import Control.Exception (bracket_)
 
 -- | Temporarily set a file's mode, restoring the original after the action.
@@ -88,9 +88,9 @@ spec = do
   describe "mkPrivCmd (permission-driven branch selection)" $ do
     it "takes the env branch for a user-owned writable directory" $ withTempDir $ \tmpDir -> do
       let outFile = tmpDir </> "out.txt"
-      c <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir)
-             ["bash", "-c", "echo env-branch > " <> outFile]
-      _ <- c
+      args <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir)
+                ["bash", "-c", T.pack $ "echo env-branch > " <> outFile]
+      _ <- exe (T.unpack <$> args)
       content <- readFile outFile
       content `shouldBe` "env-branch\n"
 
@@ -99,17 +99,17 @@ spec = do
       writeFile f "original"
       let outFile = tmpDir </> "out.txt"
       withFileMode f 0o444 $ do
-        c <- mkPrivCmd "env" WriteAccess (T.pack f)
-               ["bash", "-c", "echo sudo-branch > " <> outFile]
-        _ <- c
+        args <- mkPrivCmd "env" WriteAccess (T.pack f)
+                  ["bash", "-c", T.pack $ "echo sudo-branch > " <> outFile]
+        _ <- exe (T.unpack <$> args)
         content <- readFile outFile
         content `shouldBe` "sudo-branch\n"
 
     it "ReadAccess: takes env branch for readable file, result is captured" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "src.txt"
       writeFile f "hello"
-      c <- mkPrivCmd "sudo" ReadAccess (T.pack f) ["cat", f]
-      result <- c |> captureTrim
+      args <- mkPrivCmd "sudo" ReadAccess (T.pack f) ["cat", T.pack f]
+      result <- exe (T.unpack <$> args) |> captureTrim
       result `shouldBe` "hello"
 
     it "ReadAccess: takes sudo branch for unreadable file (injected as env)" $ withTempDir $ \tmpDir -> do
@@ -117,8 +117,8 @@ spec = do
       writeFile f "secret"
       let outFile = tmpDir </> "out.txt"
       withFileMode f 0o000 $ do
-        c <- mkPrivCmd "env" ReadAccess (T.pack f)
-               ["bash", "-c", "echo read-sudo-branch > " <> outFile]
-        _ <- c
+        args <- mkPrivCmd "env" ReadAccess (T.pack f)
+                  ["bash", "-c", T.pack $ "echo read-sudo-branch > " <> outFile]
+        _ <- exe (T.unpack <$> args)
         content <- readFile outFile
         content `shouldBe` "read-sudo-branch\n"

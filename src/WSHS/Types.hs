@@ -30,6 +30,7 @@ data Options = Options
   { command :: Command
   , sudoCache :: Bool  -- ^ If True, cache sudo credentials and refresh in background
   , sudoPassFile :: Maybe Text  -- ^ Optional path to file containing sudo password
+  , verbose :: Bool  -- ^ If True, print each command before running it
   }
   deriving (Show)
 

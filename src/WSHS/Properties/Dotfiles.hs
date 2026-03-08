@@ -53,7 +53,7 @@ data DotfilesP = DotfilesP
 
 -- | Compute the filesystem diff for a single dotfile.
 -- This determines what action (if any) is needed to bring the dotfile to the desired state.
-computeDotfileDiff :: MonadIO m => DotfileConfig -> Text -> Text -> m DotfileDiff
+computeDotfileDiff :: DotfileConfig -> Text -> Text -> WS DotfileDiff
 computeDotfileDiff f src dest = do
   -- Check if source exists
   srcExists <- isRight <$> cmd (exe "test" "-e" (T.unpack src))
@@ -96,7 +96,7 @@ computeDestPath baseDestDir f =
     Nothing -> baseDestDir <> (bool "" "." f.dot) <> f.src
 
 -- | Check if a single dotfile is in the correct state
-checkSingleDotfile :: MonadIO m => DotfileConfig -> Text -> Text -> m Bool
+checkSingleDotfile :: DotfileConfig -> Text -> Text -> WS Bool
 checkSingleDotfile f src dest = do
   case f.sort of
     Symlink -> do
@@ -113,7 +113,7 @@ checkSingleDotfile f src dest = do
           pure $ isRight diffResult
 
 -- | Compute expanded src and dest paths for a dotfile config
-computeDotfilePaths :: MonadIO m => DotfilesP -> DotfileConfig -> m (Text, Text)
+computeDotfilePaths :: DotfilesP -> DotfileConfig -> WS (Text, Text)
 computeDotfilePaths p f = do
   let baseDestDir = getDestDir p
   src <- expandPath $ p.srcDir <> "/" <> f.src

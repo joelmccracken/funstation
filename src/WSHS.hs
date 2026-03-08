@@ -79,6 +79,11 @@ optionsParser = Options
      <> metavar "FILE"
      <> help "File containing sudo password (first line only, implies --sudo-cache)"
       ))
+  <*> switch
+      ( long "verbose"
+     <> short 'v'
+     <> help "Print each command before running it"
+      )
 
 
 parseOptions :: IO Options
@@ -136,7 +141,7 @@ main = do
         ensureProperty (IsProp WSConfigDirP { configDir = cfg.configDir, configRepoUrl = cfg.configRepoUrl, configRepoBranch = cfg.configRepoBranch })
         forM_ (getProp <$> cfg.properties) ensureProperty
     Nix NixRestart ->
-      restartNixDaemon
+      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings { opts = opts, sudoCmd = "sudo" }) $ unWS restartNixDaemon
 
   -- Clean up sudo refresh thread
   case sudoThread of

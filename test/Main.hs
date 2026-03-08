@@ -42,7 +42,7 @@ import qualified SudoSpec
 -- a stable property. Figure that out at some point.
 runWS :: WS a -> IO a
 runWS action = do
-  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
+  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
   let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
@@ -50,7 +50,7 @@ runWS action = do
 -- | Run a WS action with a specific sudoCmd in Settings
 runWSWith :: String -> WS a -> IO a
 runWSWith sc action = do
-  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
+  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
   let settings = Settings { opts = opts, sudoCmd = sc }
   let initialState = WSState { props = Set.empty }
   fst <$> runStateT (runReaderT (unWS action) settings) initialState
@@ -132,7 +132,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` True
 
       it "returns False for symlink pointing to wrong target" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -150,7 +150,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
 
       it "returns False for missing symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -165,7 +165,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
 
       it "returns True for correct copy" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -181,7 +181,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` True
 
       it "returns False for copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -197,7 +197,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
 
       it "returns False for symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -213,7 +213,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
 
       it "returns True for correct directory copy" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -229,7 +229,7 @@ main = hspec $ do
               , sort = Copy
               , dir = True
               }
-        result <- checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
         result `shouldBe` True
 
       it "returns False for directory copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -246,7 +246,7 @@ main = hspec $ do
               , sort = Copy
               , dir = True
               }
-        result <- checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
         result `shouldBe` False
 
     describe "DotfilesP checker" $ do
@@ -356,26 +356,26 @@ main = hspec $ do
 
     describe "expandPath" $ do
       it "expands tilde to home directory" $ do
-        result <- expandPath "~"
+        result <- runWS $ expandPath "~"
         result `shouldSatisfy` T.isPrefixOf "/"
         result `shouldSatisfy` (not . T.isInfixOf "~")
 
       it "expands tilde in path" $ do
-        result <- expandPath "~/foo/bar"
+        result <- runWS $ expandPath "~/foo/bar"
         result `shouldSatisfy` T.isPrefixOf "/"
         result `shouldSatisfy` T.isSuffixOf "/foo/bar"
 
       it "leaves absolute paths unchanged" $ do
-        result <- expandPath "/usr/local/bin"
+        result <- runWS $ expandPath "/usr/local/bin"
         result `shouldBe` "/usr/local/bin"
 
       it "expands $HOME to home directory" $ do
-        result <- expandPath "$HOME"
+        result <- runWS $ expandPath "$HOME"
         result `shouldSatisfy` T.isPrefixOf "/"
         result `shouldSatisfy` (not . T.isInfixOf "$")
 
       it "expands $HOME in path" $ do
-        result <- expandPath "$HOME/foo/bar"
+        result <- runWS $ expandPath "$HOME/foo/bar"
         result `shouldSatisfy` T.isPrefixOf "/"
         result `shouldSatisfy` T.isSuffixOf "/foo/bar"
 
@@ -406,7 +406,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
 
       it "detects regular file when Symlink mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -422,7 +422,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` False
 
     describe "computeDotfileDiff" $ do
@@ -439,7 +439,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileCorrect
 
       it "returns DotfileCorrect for correct copy" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -455,7 +455,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileCorrect
 
       it "returns DotfileMissing when destination doesn't exist" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -470,7 +470,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileMissing
 
       it "returns DotfileBrokenSymlink for broken symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -489,7 +489,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileBrokenSymlink
 
       it "returns DotfileWrong for symlink pointing to wrong target" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -507,7 +507,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileWrong
 
       it "returns DotfileWrong for copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -523,7 +523,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileWrong
 
       it "returns DotfileWrong for symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -539,7 +539,7 @@ main = hspec $ do
               , sort = Copy
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileWrong
 
       it "returns DotfileSrcMissing when source doesn't exist" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -553,7 +553,7 @@ main = hspec $ do
               , sort = Symlink
               , dir = False
               }
-        result <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         result `shouldBe` DotfileSrcMissing (T.pack srcFile)
 
     describe "computeDotfilePaths" $ do
@@ -690,7 +690,7 @@ main = hspec $ do
         isLink <- pathIsSymbolicLink destFile
         isLink `shouldBe` True
         -- Verify it points to the right target now
-        diffResult <- computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
+        diffResult <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
         diffResult `shouldBe` DotfileCorrect
 
       it "backs up wrong file and creates new one for DotfileWrong" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -827,31 +827,31 @@ main = hspec $ do
     it "uses env prefix when path is user-owned (no sudo needed)" $ withTempDir $ \tmpDir -> do
       -- Path is user-owned → needsSudo returns False → exe ("env" : args)
       let outFile = tmpDir </> "out.txt"
-      c <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir) ["bash", "-c", "echo hello > " <> outFile]
-      _ <- c
+      args <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir) ["bash", "-c", T.pack $ "echo hello > " <> outFile]
+      _ <- exe (T.unpack <$> args)
       content <- readFile outFile
       content `shouldBe` "hello\n"
 
     it "uses injected sudo command when needs check returns True (injected as env)" $ withTempDir $ \tmpDir -> do
       -- inject "env" as the sudo command so the command succeeds even if sudo branch is taken
       let outFile = tmpDir </> "out.txt"
-      c <- mkPrivCmd "env" WriteAccess (T.pack tmpDir) ["bash", "-c", "echo injected > " <> outFile]
-      _ <- c
+      args <- mkPrivCmd "env" WriteAccess (T.pack tmpDir) ["bash", "-c", T.pack $ "echo injected > " <> outFile]
+      _ <- exe (T.unpack <$> args)
       content <- readFile outFile
       content `shouldBe` "injected\n"
 
     it "returned Cmd can be chained with |> to capture output" $ withTempDir $ \tmpDir -> do
       let srcFile = tmpDir </> "src.txt"
       writeFile srcFile "captured content"
-      c <- mkPrivCmd "sudo" ReadAccess (T.pack srcFile) ["cat", srcFile]
-      result <- c |> captureTrim
+      args <- mkPrivCmd "sudo" ReadAccess (T.pack srcFile) ["cat", T.pack srcFile]
+      result <- exe (T.unpack <$> args) |> captureTrim
       result `shouldBe` "captured content"
 
     it "returned Cmd can be chained with &> devNull" $ withTempDir $ \tmpDir -> do
       let srcFile = tmpDir </> "src.txt"
       writeFile srcFile "some content"
-      c <- mkPrivCmd "sudo" ReadAccess (T.pack srcFile) ["cat", srcFile]
-      result <- tryFailure $ c &> devNull
+      args <- mkPrivCmd "sudo" ReadAccess (T.pack srcFile) ["cat", T.pack srcFile]
+      result <- tryFailure $ exe (T.unpack <$> args) &> devNull
       result `shouldSatisfy` isRight
 
   describe "privCmd" $ do
@@ -860,7 +860,7 @@ main = hspec $ do
     it "runs WriteAccess command on user-owned path without sudo" $ withTempDir $ \tmpDir -> do
       let outFile = tmpDir </> "out.txt"
       result <- runWS $ privCmd WriteAccess (T.pack tmpDir)
-                          ["bash", "-c", "echo write-ok > " <> outFile]
+                          ["bash", "-c", T.pack $ "echo write-ok > " <> outFile]
       result `shouldSatisfy` isRight
       content <- readFile outFile
       content `shouldBe` "write-ok\n"
@@ -869,7 +869,7 @@ main = hspec $ do
       -- sudoCmd = "env" means even if sudo were needed, env is used — command succeeds
       let outFile = tmpDir </> "out.txt"
       result <- runWSWith "env" $ privCmd WriteAccess (T.pack tmpDir)
-                                    ["bash", "-c", "echo env-sudo > " <> outFile]
+                                    ["bash", "-c", T.pack $ "echo env-sudo > " <> outFile]
       result `shouldSatisfy` isRight
       content <- readFile outFile
       content `shouldBe` "env-sudo\n"
@@ -877,7 +877,7 @@ main = hspec $ do
     it "runs ReadAccess command on user-owned file" $ withTempDir $ \tmpDir -> do
       let srcFile = tmpDir </> "src.txt"
       writeFile srcFile "read-ok"
-      result <- runWS $ privCmd ReadAccess (T.pack srcFile) ["cat", srcFile]
+      result <- runWS $ privCmd ReadAccess (T.pack srcFile) ["cat", T.pack srcFile]
       result `shouldSatisfy` isRight
 
     it "fails when the command itself fails" $ withTempDir $ \tmpDir -> do

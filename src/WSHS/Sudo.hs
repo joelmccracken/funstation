@@ -54,12 +54,12 @@ needsSudoFor WriteAccess = needsSudo
 -- | Build an IO Cmd that prepends the given sudo command if the path requires
 -- the specified access, or @env@ (a no-op prefix) otherwise.
 -- The returned IO Cmd can be chained with shh operators like |> and &>.
-mkPrivCmd :: String -> AccessMode -> Text -> [String] -> IO Cmd
+mkPrivCmd :: String -> AccessMode -> Text -> [Text] -> IO [Text]
 mkPrivCmd sudoCmd mode pth args = do
   useSudo <- needsSudoFor mode pth
   pure $ if useSudo
-    then exe (sudoCmd : args)
-    else exe ("env"   : args)
+    then ((T.pack sudoCmd) : args)
+    else ("env"   : args)
 
 -- | Refresh sudo credentials by running @sudo -v@.
 -- If a password file path is provided, reads the password from that file

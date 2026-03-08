@@ -7,25 +7,31 @@ module WSHS.Commands where
 
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
--- import Data.ByteString qualified as BS
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BSC
 -- import Data.ByteString.UTF8 qualified as BS
+import Data.ByteString.Lazy.Char8 qualified as BSL
+
 import Data.Maybe (isJust)
+import Data.List qualified as List
 import System.FilePath (takeDirectory)
-import Control.Monad (void, unless)
+import Control.Monad (void, unless, when)
 import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
+import Shh qualified
 import GHC.Stack (withFrozenCallStack)
 import WSHS.Types
 import WSHS.Sudo
 
-detectOS :: MonadIO m => m OS
+detectOS :: WS OS
 detectOS = do
   osCheck  <- cmd (exe "uname" "-s" |> captureTrim)
   case osCheck of
@@ -34,7 +40,7 @@ detectOS = do
     Right "Linux" -> detectLinuxOS
     Right _ -> return Unknown
 
-detectLinuxOS :: MonadIO m => m OS
+detectLinuxOS :: WS OS
 detectLinuxOS = do
   -- Check if it's Debian-based
   debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
@@ -56,7 +62,7 @@ ensureParentDir path = do
   let parentDir = T.pack $ takeDirectory (T.unpack path)
   exists <- isRight <$> cmd (exe "test" "-d" (T.unpack parentDir))
   unless exists $ do
-    result <- privCmd WriteAccess parentDir ["mkdir", "-p", T.unpack parentDir]
+    result <- privCmd WriteAccess parentDir ["mkdir", "-p", parentDir]
     case result of
       Right _ -> pure ()
       Left err -> error $ "Failed to create directory " <> T.unpack parentDir <> ": " <> show err
@@ -76,18 +82,27 @@ getOwnerGroup path = do
 -- | Run a privilege-escalating command in the WS monad.
 -- Reads the sudo command from Settings; uses AccessMode to choose the
 -- permission check (read or write).
-privCmd :: AccessMode -> Text -> [String] -> WS (Either Failure ())
+privCmd :: AccessMode -> Text -> [Text] -> WS (Either Failure ())
 privCmd mode pth args = do
   sc <- asks (.sudoCmd)
+
   c  <- liftIO $ mkPrivCmd sc mode pth args
-  cmd c
+  c' <- mkWSCmd c
+  cmd $ exe $ T.encodeUtf8 <$> c'
+
+mkWSCmd :: [Text] -> WS [Text]
+mkWSCmd c = do
+  v <- asks (.opts.verbose)
+  when v $ liftIO $ TIO.putStrLn $ "running: " <> T.intercalate " " c
+  pure c
+
 
 -- | Move a file to a timestamped backup, using sudo only if needed.
 mvToBackupAuto :: Text -> WS Text
 mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- privCmd WriteAccess path ["mv", T.unpack path, T.unpack backupPath]
+  result <- privCmd WriteAccess path ["mv", path, backupPath]
   case result of
     Right _ -> do
       putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
@@ -120,8 +135,8 @@ fileContentsCheck path content = do
         else do
           -- Compare using diff (only need read access to target file)
           sc <- asks (.sudoCmd)
-          diffCmd <- liftIO $ mkPrivCmd sc ReadAccess path ["diff", "-q", tempFile, T.unpack path]
-          diffResult <- cmd $ diffCmd &> devNull
+          diffCmd <- liftIO $ mkPrivCmd sc ReadAccess path ["diff", "-q", T.pack tempFile, path]
+          diffResult <- cmd $ exe (T.encodeUtf8 <$> diffCmd)  &> devNull
           pure $ isRight diffResult
 
       -- Clean up temp file
@@ -163,13 +178,13 @@ fileContentsFix path content = do
             else pure ""
 
           -- Move temp file to target location (only use sudo if needed)
-          moveResult <- privCmd WriteAccess path ["mv", tempFile, T.unpack path]
+          moveResult <- privCmd WriteAccess path ["mv", T.pack tempFile, path]
           case moveResult of
             Left err -> error $ "Failed to move file to " <> T.unpack path <> ": " <> show err
             Right _ -> pure ()
 
           -- Restore original ownership when sudo was used
-          void $ privCmd WriteAccess path ["chown", T.unpack ownerGroup, T.unpack path]
+          void $ privCmd WriteAccess path ["chown", ownerGroup, path]
           pure $ Just backupPath
 
 -- Primitive WS utilities
@@ -177,16 +192,16 @@ fileContentsFix path content = do
 tshow :: Show s => s -> Text
 tshow = T.pack . show
 
-cmd :: MonadIO m => Proc a -> m (Either Failure a)
+cmd :: Proc a -> WS (Either Failure a)
 cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
 putStrLn' :: Text -> WS ()
 putStrLn' t = liftIO $ putStrLn $ T.unpack t
 
 -- | Expand a path using bash filename expansion (resolves ~, $HOME, etc.)
-expandPath :: MonadIO m => Text -> m Text
+expandPath :: Text -> WS Text
 expandPath path = do
-  result <- cmd (exe "bash" "-c" ("echo " <> T.unpack path) |> captureTrim)
+  result <- cmd $ (exe ["bash", "-c", ("echo " <> T.unpack path)] |> captureTrim)
   pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
 
 mvToBackup :: Text -> WS ()
@@ -199,7 +214,7 @@ mvToBackup path = do
     Left err -> error $ "Failed to move file: " <> show err
 
 -- | Restart the Nix daemon (OS-aware)
-restartNixDaemon :: MonadIO m => m ()
+restartNixDaemon :: WS ()
 restartNixDaemon = do
   os <- detectOS
   case os of
