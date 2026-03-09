@@ -11,6 +11,7 @@ import WSHS.Commands
 import Shh (exe, captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Aeson (eitherDecode, FromJSON)
 import Data.Either (isRight)
 import Control.Monad.Reader (ask)
@@ -58,11 +59,11 @@ instance Prop HomeManagerP where
         ws <- getWorkstation
         flakeOut <- liftIO $ mkFlakeOut ws
         expandedDir <- expandPath p.dir
-        let buildCmd = "cd " <> T.unpack expandedDir
+        let buildCmd = "cd " <> expandedDir
                     <> " && nix build --json --dry-run -v -L "
-                    <> T.unpack flakeOut
+                    <> flakeOut
                     <> " --show-trace"
-        result <- cmd (exe "bash" "-c" buildCmd |> captureTrim)
+        result <- cmd (exe "bash" "-c" (T.unpack buildCmd) |> captureTrim)
         case result of
           Left _ -> return False
           Right jsonBytes ->
@@ -77,10 +78,11 @@ instance Prop HomeManagerP where
     ws <- getWorkstation
     flakeOut <- liftIO $ mkFlakeOut ws
     expandedDir <- expandPath p.dir
-    let runCmd = "cd " <> T.unpack expandedDir
+    let runCmd = "cd " <> expandedDir
               <> " && nix -v -L --show-trace run "
-              <> T.unpack flakeOut
-    result <- cmd (exe "bash" "-c" runCmd)
+              <> flakeOut
+    args' <- mkWSCmd ["bash", "-c", runCmd]
+    result <- cmd $ exe $ T.encodeUtf8 <$> args'
     case result of
       Right _ -> putStrLn' "Home Manager configuration activated."
       Left err -> error $ "Home Manager activation failed: " <> show err

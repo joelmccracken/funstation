@@ -12,6 +12,7 @@ import WSHS.Properties.Git
 import Shh (exe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Either (isRight)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
@@ -40,7 +41,8 @@ instance Prop WSConfigDirP where
     isRight <$> cmd (exe "test" "-d" (T.unpack expandedDir))
   fixer p = do
     expandedDir <- expandPath p.configDir
-    result <- cmd (exe "git" "clone" "--branch" (T.unpack p.configRepoBranch) (T.unpack p.configRepoUrl) (T.unpack expandedDir))
+    args' <- mkWSCmd ["git", "clone", "--branch", p.configRepoBranch, p.configRepoUrl, expandedDir]
+    result <- cmd $ exe $ T.encodeUtf8 <$> args'
     case result of
       Right _ -> putStrLn' $ "Cloned repository to " <> p.configDir
       Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err

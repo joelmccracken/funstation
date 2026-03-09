@@ -12,12 +12,12 @@ import WSHS.Commands
 import Shh (exe, devNull, (&>), captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Bool (bool)
 import Data.Either (isRight)
 import Control.Monad (void, forM_, forM)
-import Control.Monad.IO.Class (MonadIO)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
@@ -128,7 +128,8 @@ applyDotfileFix f src dest diff = do
   case diff of
     DotfileBrokenSymlink -> do
       putStrLn' $ "Removing broken symlink: " <> dest
-      void $ cmd (exe "rm" (T.unpack dest))
+      rmArgs <- mkWSCmd ["rm", dest]
+      void $ cmd $ exe $ T.encodeUtf8 <$> rmArgs
     DotfileWrong -> do
       putStrLn' $ "Backing up existing file: " <> dest
       mvToBackup dest
@@ -138,10 +139,12 @@ applyDotfileFix f src dest diff = do
   case f.sort of
     Symlink -> do
       putStrLn' $ "Creating symlink: " <> dest <> " -> " <> src
-      void $ cmd (exe "ln" "-s" (T.unpack src) (T.unpack dest))
+      lnArgs <- mkWSCmd ["ln", "-s", src, dest]
+      void $ cmd $ exe $ T.encodeUtf8 <$> lnArgs
     Copy -> do
       putStrLn' $ "Copying: " <> src <> " -> " <> dest
-      void $ cmd (exe "cp" "-r" (T.unpack src) (T.unpack dest))
+      cpArgs <- mkWSCmd ["cp", "-r", src, dest]
+      void $ cmd $ exe $ T.encodeUtf8 <$> cpArgs
 
 instance Prop DotfilesP where
   desc _ = "dotfiles management"

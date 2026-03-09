@@ -14,6 +14,7 @@ import Data.Aeson (FromJSON, ToJSON, eitherDecode)
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import qualified Data.ByteString.Lazy as LBS
@@ -23,7 +24,6 @@ import System.Directory (doesFileExist, createDirectoryIfMissing)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Control.Monad (forM_, void)
 import Control.Monad.IO.Class (liftIO)
-import Data.List (isPrefixOf)
 
 -- ---------------------------------------------------------------------------
 -- Data type
@@ -48,9 +48,11 @@ data BwItem = BwItem
 -- Helpers
 
 -- | Run a bw command via bash, suppressing Node.js deprecation warnings.
-bwCmd :: [String] -> WS (Either Failure LBS.ByteString)
-bwCmd args =
-  cmd (exe "bash" "-c" ("NODE_OPTIONS='--no-deprecation' bw " <> unwords args) |> captureTrim)
+bwCmd :: [Text] -> WS (Either Failure LBS.ByteString)
+bwCmd args = do
+  let shellCmd = "NODE_OPTIONS='--no-deprecation' bw " <> T.unwords args
+  args' <- mkWSCmd ["bash", "-c", shellCmd]
+  cmd $ exe (T.encodeUtf8 <$> args') |> captureTrim
 
 -- | Read the last-sync POSIX timestamp from state file; returns 0 if absent.
 getLastSyncTs :: FilePath -> IO Integer
@@ -99,11 +101,11 @@ instance Prop BitwardenSecretsP where
   fixer _ = do
     home <- liftIO $ getEnv "HOME"
     let emailFile = home <> "/secrets/bw_email"
-        passFile  = home <> "/secrets/bw_master_pass"
+        passFile  = T.pack $ home <> "/secrets/bw_master_pass"
 
     -- 1. Login (silently ignored if already logged in)
     putStrLn' "  Logging in to Bitwarden..."
-    email <- liftIO $ T.unpack . T.strip . T.pack <$> readFile emailFile
+    email <- liftIO $ T.strip . T.pack <$> readFile emailFile
     _ <- bwCmd ["login", email, "--passwordfile", passFile]
 
     -- 2. Unlock vault, capture session token
@@ -135,7 +137,8 @@ instance Prop BitwardenSecretsP where
           [] -> do
             putStrLn' "  Creating bww_files folder in Bitwarden vault..."
             let script = "NODE_OPTIONS='--no-deprecation' printf '%s' '{\"name\":\"bww_files\"}' | bw encode | bw create folder"
-            createResult <- cmd (exe "bash" "-c" script |> captureTrim)
+            createArgs <- mkWSCmd ["bash", "-c", script]
+            createResult <- cmd $ exe (T.encodeUtf8 <$> createArgs) |> captureTrim
             case createResult of
               Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("bw create folder failed: " <> show err)
               Right bs2 -> case eitherDecode bs2 :: Either String BwFolder of
@@ -143,7 +146,7 @@ instance Prop BitwardenSecretsP where
                 Right f  -> return f.id
 
     -- 5. List items in the folder
-    itemsResult <- bwCmd ["list", "items", "--folderid", T.unpack folderId]
+    itemsResult <- bwCmd ["list", "items", "--folderid", folderId]
     items <- case itemsResult of
       Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("bw list items failed: " <> show err)
       Right bs -> case eitherDecode bs :: Either String [BwItem] of
@@ -151,7 +154,7 @@ instance Prop BitwardenSecretsP where
         Right is -> return is
 
     -- 6. Write each file item to disk
-    let fileItems = filter (\i -> "file:" `isPrefixOf` T.unpack i.name) items
+    let fileItems = filter (\i -> T.isPrefixOf "file:" i.name) items
     putStrLn' $ "  Found " <> T.pack (show (length fileItems)) <> " file item(s) in vault"
     forM_ fileItems $ \item -> do
       let rawPath = T.drop (T.length "file:") item.name
@@ -162,7 +165,8 @@ instance Prop BitwardenSecretsP where
           putStrLn' $ "  Writing " <> expandedPath <> "..."
           ensureParentDir expandedPath
           void $ fileContentsFix expandedPath content
-          void $ cmd (exe "chmod" "0600" (T.unpack expandedPath))
+          chmodArgs <- mkWSCmd ["chmod", "0600", expandedPath]
+          void $ cmd $ exe $ T.encodeUtf8 <$> chmodArgs
 
     -- 7. Save sync timestamp
     liftIO $ saveLastSyncTs home

@@ -13,6 +13,7 @@ import WSHS.Properties.Debian
 import Shh (exe, devNull, (&>))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Either (isRight)
 import Data.Bool (bool)
 import qualified Data.Map.Strict as Map
@@ -39,18 +40,17 @@ instance Prop GitTrackHomeDirP where
     isRight <$> cmd (exe "test" "-d" (T.unpack expandedGitDir))
   fixer p = do
     expandedGitDir <- expandPath $ gitDir p
-    let cmdtxt = [ "export GIT_DIR='"
-                 , T.unpack expandedGitDir
-                 , "'; "
-                 , concat [ "("
-                          , "cd $HOME; "
-                          , "git init .; "
-                          , "git config --local --get-all core.bare true >/dev/null && "
-                          , "git config --local --replace-all core.bare false true "
-                          , ")"
-                          ]
-                 ]
-    result <- cmd (exe "bash" "-c" $ concat cmdtxt)
+    let shellCmd = T.concat
+          [ "export GIT_DIR='", expandedGitDir, "'; "
+          , "("
+          , "cd $HOME; "
+          , "git init .; "
+          , "git config --local --get-all core.bare true >/dev/null && "
+          , "git config --local --replace-all core.bare false true "
+          , ")"
+          ]
+    args' <- mkWSCmd ["bash", "-c", shellCmd]
+    result <- cmd $ exe $ T.encodeUtf8 <$> args'
     case result of
       Right _ -> putStrLn' "home dir git tracking setup successfully"
       Left err -> putStrLn' $ "Failed setting up home dir git tracking: " <> tshow err
@@ -62,7 +62,8 @@ instance Prop GitMacOSP where
   attrs _ = mempty
   checker _ = hasCmd' "git"
   fixer _ = do
-    result <- cmd (exe "brew" "install" "git" &> devNull)
+    args' <- mkWSCmd ["brew", "install", "git"]
+    result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
     case result of
       Right _ -> putStrLn' "Git installed successfully"
       Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -73,7 +74,8 @@ instance Prop GitDebianP where
   attrs _ = mempty
   checker _ = hasCmd' "git"
   fixer _ = do
-    result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
+    args' <- mkWSCmd ["sudo", "apt-get", "install", "-y", "git"]
+    result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
     case result of
       Right _ -> putStrLn' "Git installed successfully"
       Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -95,12 +97,14 @@ instance Prop HasGitP where
     case os of
       Unknown -> error "error: Unknown OS, unable to install git"
       MacOS -> do
-        result <- cmd (exe "brew" "install" "git" &> devNull)
+        args' <- mkWSCmd ["brew", "install", "git"]
+        result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> error $ "Failed to install git: " ++ show err
       Debian -> do
-        result <- cmd (exe "sudo" "apt-get" "install" "-y" "git" &> devNull)
+        args' <- mkWSCmd ["sudo", "apt-get", "install", "-y", "git"]
+        result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> error $ "Failed to install git: " ++ show err

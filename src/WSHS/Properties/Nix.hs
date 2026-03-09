@@ -11,6 +11,7 @@ import WSHS.Commands
 import Shh (exe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
 import Data.Maybe (fromMaybe)
 import Data.Either (isRight)
 import Control.Monad (unless, when)
@@ -64,12 +65,13 @@ instance Prop NixDaemonP where
       installNix = do
         let ver = fromMaybe defaultNixVersion p.version
         let installerUrl = "https://releases.nixos.org/nix/nix-" <> ver <> "/install"
-        let yesFlag = if p.interactive then "" else " --yes"
+        let yesFlag = if p.interactive then "" else " --yes" :: Text
 
         putStrLn' $ "Installing Nix " <> ver <> "..."
 
-        let installCmd = "curl -L " <> T.unpack installerUrl <> " | sh -s -- --daemon" <> T.unpack yesFlag
-        result <- cmd (exe "bash" "-c" installCmd)
+        let installCmd = "curl -L " <> installerUrl <> " | sh -s -- --daemon" <> yesFlag
+        args' <- mkWSCmd ["bash", "-c", installCmd]
+        result <- cmd $ exe $ T.encodeUtf8 <$> args'
         case result of
           Left err -> error $ "Nix installation failed: " <> show err
           Right _ -> pure ()

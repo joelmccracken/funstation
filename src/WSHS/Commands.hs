@@ -12,13 +12,7 @@ import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
-import Data.ByteString qualified as BS
-import Data.ByteString.Char8 qualified as BSC
--- import Data.ByteString.UTF8 qualified as BS
-import Data.ByteString.Lazy.Char8 qualified as BSL
-
 import Data.Maybe (isJust)
-import Data.List qualified as List
 import System.FilePath (takeDirectory)
 import Control.Monad (void, unless, when)
 import Control.Concurrent (threadDelay)
@@ -26,7 +20,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader (asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
-import Shh qualified
 import GHC.Stack (withFrozenCallStack)
 import WSHS.Types
 import WSHS.Sudo
@@ -208,7 +201,8 @@ mvToBackup :: Text -> WS ()
 mvToBackup path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- cmd (exe "mv" (T.unpack path) (T.unpack backupPath))
+  args' <- mkWSCmd ["mv", path, backupPath]
+  result <- cmd $ exe $ T.encodeUtf8 <$> args'
   case result of
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
     Left err -> error $ "Failed to move file: " <> show err
@@ -220,10 +214,13 @@ restartNixDaemon = do
   case os of
     MacOS -> do
       liftIO $ putStrLn "Restarting Nix daemon (macOS)..."
-      void $ cmd (exe "sudo" "launchctl" "unload" "/Library/LaunchDaemons/org.nixos.nix-daemon.plist")
-      void $ cmd (exe "sudo" "launchctl" "load" "/Library/LaunchDaemons/org.nixos.nix-daemon.plist")
+      unloadArgs <- mkWSCmd ["sudo", "launchctl", "unload", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"]
+      void $ cmd $ exe $ T.encodeUtf8 <$> unloadArgs
+      loadArgs <- mkWSCmd ["sudo", "launchctl", "load", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"]
+      void $ cmd $ exe $ T.encodeUtf8 <$> loadArgs
     Debian -> do
       liftIO $ putStrLn "Restarting Nix daemon (Debian)..."
-      void $ cmd (exe "sudo" "systemctl" "restart" "nix-daemon.service")
+      restartArgs <- mkWSCmd ["sudo", "systemctl", "restart", "nix-daemon.service"]
+      void $ cmd $ exe $ T.encodeUtf8 <$> restartArgs
     Unknown -> error "Cannot restart nix daemon: unknown OS"
   liftIO $ threadDelay 5000000
