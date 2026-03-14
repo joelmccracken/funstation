@@ -56,14 +56,14 @@ data DotfilesP = DotfilesP
 computeDotfileDiff :: DotfileConfig -> Text -> Text -> WS DotfileDiff
 computeDotfileDiff f src dest = do
   -- Check if source exists
-  srcExists <- isRight <$> cmd (exe "test" "-e" (T.unpack src))
+  srcExists <- fileExists src
   if not srcExists
     then pure $ DotfileSrcMissing src
     else do
       -- Check if dest is a symlink (regardless of whether target exists)
       isLink <- isRight <$> cmd (exe "test" "-L" (T.unpack dest))
       -- Check if dest exists (follows symlinks, so broken symlink = False)
-      destExists <- isRight <$> cmd (exe "test" "-e" (T.unpack dest))
+      destExists <- fileExists dest
 
       case (isLink, destExists) of
         (True, False) ->

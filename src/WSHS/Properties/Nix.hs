@@ -13,7 +13,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Maybe (fromMaybe)
-import Data.Either (isRight)
 import Control.Monad (unless, when)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
@@ -77,7 +76,7 @@ instance Prop NixDaemonP where
           Right _ -> pure ()
 
         -- Verify profile exists
-        profileExists <- isRight <$> cmd (exe "test" "-e" nixDaemonProfile)
+        profileExists <- fileExists (T.pack nixDaemonProfile)
         unless profileExists $
           error $ "Nix installed, but cannot find profile file: " <> nixDaemonProfile
 

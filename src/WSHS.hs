@@ -32,6 +32,7 @@ import Data.Set (Set)
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
+getProp (GitHomeDirClone p) = IsProp p
 getProp (Dotfiles p) = IsProp p
 getProp (NixDaemon p) = IsProp p
 getProp (HomeManager p) = IsProp p

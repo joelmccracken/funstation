@@ -49,11 +49,19 @@ which cmdName = do
 hasCmd' :: Text -> WS Bool
 hasCmd' cmdName = isJust <$> which cmdName
 
+-- | Check if a directory exists.
+dirExists :: Text -> WS Bool
+dirExists path = isRight <$> cmd (exe "test" "-d" (T.unpack path))
+
+-- | Check if a file (or any path) exists.
+fileExists :: Text -> WS Bool
+fileExists path = isRight <$> cmd (exe "test" "-e" (T.unpack path))
+
 -- | Ensure a parent directory exists, using sudo only if needed.
 ensureParentDir :: Text -> WS ()
 ensureParentDir path = do
   let parentDir = T.pack $ takeDirectory (T.unpack path)
-  exists <- isRight <$> cmd (exe "test" "-d" (T.unpack parentDir))
+  exists <- dirExists parentDir
   unless exists $ do
     result <- privCmd WriteAccess parentDir ["mkdir", "-p", parentDir]
     case result of
@@ -121,7 +129,7 @@ fileContentsCheck path content = do
       liftIO $ TIO.writeFile tempFile content
 
       -- Check if target file exists
-      targetExists <- isRight <$> cmd (exe "test" "-e" (T.unpack path))
+      targetExists <- fileExists path
 
       result <- if not targetExists
         then pure False  -- Target doesn't exist, needs fixing
@@ -160,7 +168,7 @@ fileContentsFix path content = do
           liftIO $ TIO.writeFile tempFile content
 
           -- Check if target exists; capture owner info before any changes
-          targetExists <- isRight <$> cmd (exe "test" "-e" (T.unpack path))
+          targetExists <- fileExists path
           ownerGroup <- if targetExists
             then getOwnerGroup path
             else getOwnerGroup (T.pack $ takeDirectory (T.unpack path))

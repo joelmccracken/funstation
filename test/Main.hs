@@ -34,6 +34,7 @@ import Shh.Internal (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFa
 import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 import Data.Either (isRight)
 import qualified SudoSpec
+import qualified GitHomeDirSpec
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state
@@ -888,3 +889,6 @@ main = hspec $ do
 
   describe "sudo functionality" $  do
     SudoSpec.spec
+
+  describe "GitHomeDirCloneP" $
+    GitHomeDirSpec.spec

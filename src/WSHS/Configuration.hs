@@ -4,7 +4,7 @@
 
 module WSHS.Configuration where
 
-import WSHS.Properties.Git         (GitTrackHomeDirP)
+import WSHS.Properties.Git         (GitTrackHomeDirP, GitHomeDirCloneP)
 import WSHS.Properties.Dotfiles    (DotfilesP)
 import WSHS.Properties.Nix         (NixDaemonP)
 import WSHS.Properties.HomeManager (HomeManagerP)
@@ -16,6 +16,7 @@ import Data.Text (Text)
 
 data Property
   = GitHomeDir      GitTrackHomeDirP
+  | GitHomeDirClone GitHomeDirCloneP
   | Dotfiles        DotfilesP
   | NixDaemon       NixDaemonP
   | HomeManager     HomeManagerP

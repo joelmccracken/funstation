@@ -13,7 +13,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Aeson (eitherDecode, FromJSON)
-import Data.Either (isRight)
 import Control.Monad.Reader (ask)
 import Control.Monad.IO.Class (liftIO)
 import System.Environment (getEnv)
@@ -72,7 +71,7 @@ instance Prop HomeManagerP where
               Right [] -> return False
               Right (entry:_) ->
                 let outPath = T.unpack entry.outputs.out
-                in isRight <$> cmd (exe "test" "-e" outPath)
+                in fileExists (T.pack outPath)
 
   fixer p = do
     ws <- getWorkstation

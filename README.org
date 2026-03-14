@@ -49,3 +49,9 @@ notes.org)
 #+begin_src sh
   bash test/vm/run-in-vm.sh
 #+end_src
+
+
+can build possibly with other cabal tooling, not how I normally do it:
+#+begin_src sh
+  cabal build wshs-test --allow-newer
+#+end_src

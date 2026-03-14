@@ -11,9 +11,7 @@ import WSHS.Commands
 import WSHS.Properties.Git
 import Shh (exe)
 import Data.Text (Text)
-import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
-import Data.Either (isRight)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
@@ -38,7 +36,7 @@ instance Prop WSConfigDirP where
   attrs _ = mempty
   checker p = do
     expandedDir <- expandPath p.configDir
-    isRight <$> cmd (exe "test" "-d" (T.unpack expandedDir))
+    dirExists expandedDir
   fixer p = do
     expandedDir <- expandPath p.configDir
     args' <- mkWSCmd ["git", "clone", "--branch", p.configRepoBranch, p.configRepoUrl, expandedDir]
