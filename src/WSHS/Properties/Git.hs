@@ -67,17 +67,19 @@ instance Prop GitHomeDirCloneP where
     -- 1. Git dir must exist
     gitDirExists <- dirExists expandedGitDir
     if not gitDirExists then pure False else do
-
       -- 2. Remote URL must match
-      remoteResult <- gitDirRemoteUrl expandedGitDir "origin"
-      case remoteResult of
-        Left  _ -> pure False
-        Right currentUrl -> do
-          if currentUrl /= p.remoteUrl then pure False else do
-            -- 3. All tracked files must be present in homeDir
-            allTrackedFilesPresent expandedGitDir expandedHomeDir p.branch
+      hasRemote <- hasRemoteUrl expandedGitDir p.remoteUrl
+      if not hasRemote then pure False else
+        -- 3. All tracked files must be present in homeDir
+        allTrackedFilesPresent expandedGitDir expandedHomeDir p.branch
 
    where
+    hasRemoteUrl gitDir correctUrl =  do
+      remoteResult <- gitDirRemoteUrl gitDir "origin"
+      case remoteResult of
+        Left  _ -> pure False
+        Right currentUrl -> pure $ currentUrl == correctUrl
+
     allTrackedFilesPresent gitDir destDir branch = do
       lsResult <- gitLsTree gitDir ("origin/" <> branch)
       case lsResult of
