@@ -18,22 +18,16 @@ run with
   cabal build && cabal run -- wshs bootstrap ./config.yaml glamdring
 #+end_src
 
-test with
+run main test suite with
 
 #+begin_src sh
   cabal test
-  cabal test wshs-scratch
--- Skipped by default; to run:
---   cabal test -f scratch
--- or
---   cabal test --flags=scratch
 #+end_src
 
 to run the "scratch" suite:
 
 #+begin_src sh
   cabal test -f scratch wshs-scratch
-  cabal test --flags=scratch wshs-scratch
 #+end_src
 ** outside  of a nix develop session
 
