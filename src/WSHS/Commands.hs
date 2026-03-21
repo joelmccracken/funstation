@@ -57,6 +57,12 @@ dirExists path = isRight <$> cmd (exe "test" "-d" (T.unpack path))
 fileExists :: Text -> WS Bool
 fileExists path = isRight <$> cmd (exe "test" "-e" (T.unpack path))
 
+-- | Create a directory (and any missing parents).
+mkDir :: Text -> WS ()
+mkDir path = do
+  args' <- mkWSCmd ["mkdir", "-p", path]
+  void $ cmd $ exe $ T.encodeUtf8 <$> args'
+
 -- | Ensure a parent directory exists, using sudo only if needed.
 ensureParentDir :: Text -> WS ()
 ensureParentDir path = do

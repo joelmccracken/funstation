@@ -177,6 +177,12 @@ spec = describe "GitHomeDirCloneP" $ do
         exists <- doesPathExist sentinelFile
         exists `shouldBe` False
 
+    it "git status works from homeDir when gitDir is relative '.git'" $ withGitHomeTest $ \remoteDir _gitDir fakeHome -> do
+      let p = mkProp remoteDir ".git" fakeHome Nothing
+      runWS $ fixer p
+      withCurrentDirectory fakeHome $
+        git ["status"]
+
     it "is idempotent: second fixer run leaves files unchanged" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p

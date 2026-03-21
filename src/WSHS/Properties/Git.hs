@@ -61,8 +61,8 @@ instance Prop GitHomeDirCloneP where
     ]
 
   checker p = do
-    expandedGitDir  <- expandPath p.gitDir
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
+    expandedGitDir <- expandPath p.gitDir >>= resolveGitDir expandedHomeDir
 
     -- 1. Git dir must exist
     gitDirExists <- dirExists expandedGitDir
@@ -76,34 +76,42 @@ instance Prop GitHomeDirCloneP where
    where
     hasRemoteUrl gitDir correctUrl =  do
       remoteResult <- gitDirRemoteUrl gitDir "origin"
-      case remoteResult of
-        Left  _ -> pure False
-        Right currentUrl -> pure $ currentUrl == correctUrl
+      pure $ either (const False) (== correctUrl) remoteResult
 
     allTrackedFilesPresent gitDir destDir branch = do
       lsResult <- gitLsTree gitDir ("origin/" <> branch)
-      case lsResult of
-        Left  _ -> pure False  -- remote branch not fetched yet
-        Right files -> do
+      either (const $ pure False) checkAllFiles lsResult
+     where
+        checkAllFiles files =
           fmap and $ forM files $ \f -> do
             let destPath = destDir <> "/" <> f
             fileExists destPath
 
   fixer p = do
-    expandedGitDir  <- expandPath p.gitDir
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
+    expandedGitDir <- expandPath p.gitDir >>= resolveGitDir expandedHomeDir
+
     changed <- liftIO $ newIORef False
 
-    -- Step 1: init bare repo if missing
+
+
     gitDirExists <- dirExists expandedGitDir
-    unless gitDirExists $ do
-      args' <- mkWSCmd ["git", "init", "--bare", expandedGitDir]
-      result <- cmd $ exe $ T.encodeUtf8 <$> args'
-      case result of
-        Right _ -> do
-          putStrLn' $ "Initialized bare repo at " <> expandedGitDir
-          liftIO $ writeIORef changed True
-        Left err -> error $ "Failed to init bare repo: " <> show err
+
+    didInitializeGitDir <-
+      if not gitDirExists then do
+        args' <- mkWSCmd ["git", "init", "--bare", expandedGitDir]
+        result <- cmd $ exe $ T.encodeUtf8 <$> args'
+        case result of
+          Right _ -> do
+            putStrLn' $ "Initialized bare repo at " <> expandedGitDir
+            void $ cmd $ exe $ T.encodeUtf8 <$>
+              ["git", "--git-dir", expandedGitDir, "config", "core.bare", "false"]
+            void $ cmd $ exe $ T.encodeUtf8 <$>
+              ["git", "--git-dir", expandedGitDir, "config", "core.worktree", expandedHomeDir]
+            liftIO $ writeIORef changed True
+            pure True
+          Left err -> error $ "Failed to init bare repo: " <> show err
+      else pure False
 
     -- Step 2: configure remote (add or update)
     remoteResult <- gitDirRemoteUrl expandedGitDir "origin"
@@ -111,7 +119,7 @@ instance Prop GitHomeDirCloneP where
       Right currentUrl | currentUrl == p.remoteUrl ->
         pure ()  -- already correct
       Right _ -> do
-        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "remote", "set-url", "origin", p.remoteUrl]
+        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree=", expandedHomeDir, "remote", "set-url", "origin", p.remoteUrl]
         void $ cmd $ exe $ T.encodeUtf8 <$> args'
         liftIO $ writeIORef changed True
       Left _ -> do
@@ -133,7 +141,11 @@ instance Prop GitHomeDirCloneP where
     args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "branch", "--set-upstream-to", remoteBranch, p.branch]
     void $ cmd $ exe $ T.encodeUtf8 <$> args'
 
-    -- Step 5: soft-checkout files missing from homeDir
+    -- Step 5: ensure homeDir exists
+    homeDirExists <- dirExists expandedHomeDir
+    unless homeDirExists $ mkDir expandedHomeDir
+
+    -- Step 6: soft-checkout files missing from homeDir
     lsResult <- gitLsTree expandedGitDir ("origin/" <> p.branch)
     case lsResult of
       Left err -> error $ "Failed to list tracked files: " <> show err
@@ -149,9 +161,9 @@ instance Prop GitHomeDirCloneP where
               Right _ -> liftIO $ writeIORef changed True
               Left err -> putStrLn' $ "Warning: failed to checkout " <> f <> ": " <> tshow err
 
-    -- Step 6: run post-change script if anything changed
+    -- Step 7: run post-change script if anything changed
     didChange <- liftIO $ readIORef changed
-    when didChange $ forM_ p.runAfterChange $ \script -> do
+    when (or [didChange, didInitializeGitDir]) $ forM_ p.runAfterChange $ \script -> do
       expandedScript <- expandPath script
       putStrLn' $ "Running post-change script: " <> expandedScript
       scriptArgs <- mkWSCmd ["bash", expandedScript]
@@ -250,3 +262,8 @@ instance Prop HasGitP where
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> error $ "Failed to install git: " ++ show err
+
+resolveGitDir :: Text -> Text -> WS Text
+resolveGitDir homeDir gitDir
+  | "/" `T.isPrefixOf` gitDir = pure gitDir
+  | otherwise                 = pure $ homeDir <> "/" <> gitDir
