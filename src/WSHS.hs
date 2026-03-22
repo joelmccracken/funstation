@@ -25,7 +25,6 @@ import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
 import Control.Monad (forM_)
 import Control.Concurrent (killThread)
-import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except (runExceptT)
@@ -88,7 +87,6 @@ optionsParser = Options
      <> help "Print each command before running it"
       )
 
-
 parseOptions :: IO Options
 parseOptions =
   execParser $ info (optionsParser <**> helper)
@@ -142,20 +140,28 @@ main = do
  where
   doBootstrap opts cfgPath ws = do
     cfg <- decodeFileThrow cfgPath :: IO Configuration
+    let state' = WSState { props = mempty }
     (result, _) <- runStateT
       (runExceptT (runReaderT (unWS $ do
-        putStrLn' $ "Workstation: " <> ws
-        putStrLn' "\nEnsuring properties..."
-        ensureProperty (IsProp BasicSetupP)
-        ensureProperty (IsProp WSConfigDirP { configDir = cfg.configDir, configRepoUrl = cfg.configRepoUrl, configRepoBranch = cfg.configRepoBranch })
-        forM_ (getProp <$> cfg.properties) ensureProperty)
+          putStrLn' $ "Workstation: " <> ws
+          putStrLn' "\nEnsuring properties..."
+          ensureProperty (IsProp BasicSetupP)
+          ensureProperty (IsProp $ configDirProp cfg)
+          forM_ (getProp <$> cfg.properties) ensureProperty)
         (Settings { opts = opts, sudoCmd = "sudo" })))
-      (WSState { props = mempty })
+      state'
     case result of
       Left (WSFailure msg) -> do
         putStrLn $ "wshs: error: " <> T.unpack msg
         exitFailure
       Right _ -> pure ()
+
+  configDirProp cfg =
+    WSConfigDirP
+    { configDir = cfg.configDir
+    , configRepoUrl = cfg.configRepoUrl
+    , configRepoBranch = cfg.configRepoBranch
+    }
 
   doNixRestart opts = do
     (result, _) <- runStateT
