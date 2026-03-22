@@ -6,6 +6,7 @@
 
 module WSHS.Properties.HomeManager where
 
+import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
 import Shh (exe, captureTrim, (|>))
@@ -44,7 +45,7 @@ getWorkstation = do
   settings <- ask
   case settings.opts.command of
     Bootstrap { workstation = ws } -> return ws
-    _ -> error "HomeManagerP can only be used from a Bootstrap command"
+    _ -> throwError $ WSFailure "HomeManagerP can only be used from a Bootstrap command"
 
 instance Prop HomeManagerP where
   desc _ = "home-manager configuration"
@@ -84,6 +85,6 @@ instance Prop HomeManagerP where
     result <- cmd $ exe $ T.encodeUtf8 <$> args'
     case result of
       Right _ -> putStrLn' "Home Manager configuration activated."
-      Left err -> error $ "Home Manager activation failed: " <> show err
+      Left err -> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err
 
   dependencies _ = return []

@@ -21,6 +21,7 @@ import Control.Monad.Reader (asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
 import GHC.Stack (withFrozenCallStack)
+import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Sudo
 
@@ -28,7 +29,7 @@ detectOS :: WS OS
 detectOS = do
   osCheck  <- cmd (exe "uname" "-s" |> captureTrim)
   case osCheck of
-    Left e -> error $ "error detecting OS: " <> show e
+    Left e -> throwError $ WSFailure $ "error detecting OS: " <> tshow e
     Right "Darwin" -> return MacOS
     Right "Linux" -> detectLinuxOS
     Right _ -> return Unknown
@@ -72,7 +73,7 @@ ensureParentDir path = do
     result <- privCmd WriteAccess parentDir ["mkdir", "-p", parentDir]
     case result of
       Right _ -> pure ()
-      Left err -> error $ "Failed to create directory " <> T.unpack parentDir <> ": " <> show err
+      Left err -> throwError $ WSFailure $ "Failed to create directory " <> parentDir <> ": " <> tshow err
 
 -- | Get "owner:group" for a path, for use with chown.
 -- Uses ls -ld which works on both macOS and Linux.
@@ -114,7 +115,7 @@ mvToBackupAuto path = do
     Right _ -> do
       putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
       pure backupPath
-    Left err -> error $ "Failed to backup file: " <> show err
+    Left err -> throwError $ WSFailure $ "Failed to backup file: " <> tshow err
 
 {-# DEPRECATED mvToBackupSudo "Use mvToBackupAuto instead" #-}
 mvToBackupSudo :: Text -> WS Text
@@ -127,7 +128,7 @@ fileContentsCheck path content = do
   -- Create temp file with desired content
   tempFileResult <- cmd (exe "mktemp" |> captureTrim)
   case tempFileResult of
-    Left err -> error $ "Failed to create temp file: " <> show err
+    Left err -> throwError $ WSFailure $ "Failed to create temp file: " <> tshow err
     Right tempFileBytes -> do
       let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
 
@@ -166,7 +167,7 @@ fileContentsFix path content = do
       -- Create temp file with desired content
       tempFileResult <- cmd (exe "mktemp" |> captureTrim)
       case tempFileResult of
-        Left err -> error $ "Failed to create temp file: " <> show err
+        Left err -> throwError $ WSFailure $ "Failed to create temp file: " <> tshow err
         Right tempFileBytes -> do
           let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
 
@@ -187,7 +188,7 @@ fileContentsFix path content = do
           -- Move temp file to target location (only use sudo if needed)
           moveResult <- privCmd WriteAccess path ["mv", T.pack tempFile, path]
           case moveResult of
-            Left err -> error $ "Failed to move file to " <> T.unpack path <> ": " <> show err
+            Left err -> throwError $ WSFailure $ "Failed to move file to " <> path <> ": " <> tshow err
             Right _ -> pure ()
 
           -- Restore original ownership when sudo was used
@@ -219,7 +220,7 @@ mvToBackup path = do
   result <- cmd $ exe $ T.encodeUtf8 <$> args'
   case result of
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
-    Left err -> error $ "Failed to move file: " <> show err
+    Left err -> throwError $ WSFailure $ "Failed to move file: " <> tshow err
 
 -- | Restart the Nix daemon (OS-aware)
 restartNixDaemon :: WS ()
@@ -236,5 +237,5 @@ restartNixDaemon = do
       liftIO $ putStrLn "Restarting Nix daemon (Debian)..."
       restartArgs <- mkWSCmd ["sudo", "systemctl", "restart", "nix-daemon.service"]
       void $ cmd $ exe $ T.encodeUtf8 <$> restartArgs
-    Unknown -> error "Cannot restart nix daemon: unknown OS"
+    Unknown -> throwError $ WSFailure "Cannot restart nix daemon: unknown OS"
   liftIO $ threadDelay 5000000

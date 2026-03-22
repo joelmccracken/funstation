@@ -6,6 +6,7 @@
 
 module WSHS.Properties.Nix where
 
+import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
 import Shh (exe)
@@ -72,13 +73,13 @@ instance Prop NixDaemonP where
         args' <- mkWSCmd ["bash", "-c", installCmd]
         result <- cmd $ exe $ T.encodeUtf8 <$> args'
         case result of
-          Left err -> error $ "Nix installation failed: " <> show err
+          Left err -> throwError $ WSFailure $ "Nix installation failed: " <> tshow err
           Right _ -> pure ()
 
         -- Verify profile exists
         profileExists <- fileExists (T.pack nixDaemonProfile)
         unless profileExists $
-          error $ "Nix installed, but cannot find profile file: " <> nixDaemonProfile
+          throwError $ WSFailure $ "Nix installed, but cannot find profile file: " <> T.pack nixDaemonProfile
 
         putStrLn' ""
         putStrLn' "Nix installed. Add the following to your shell profile:"

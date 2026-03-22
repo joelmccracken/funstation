@@ -7,6 +7,7 @@
 
 module WSHS.Properties.Git where
 
+import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
 import WSHS.Properties.MacOS
@@ -110,7 +111,7 @@ instance Prop GitHomeDirCloneP where
               ["git", "--git-dir", expandedGitDir, "config", "core.worktree", expandedHomeDir]
             liftIO $ writeIORef changed True
             pure True
-          Left err -> error $ "Failed to init bare repo: " <> show err
+          Left err -> throwError $ WSFailure $ "Failed to init bare repo: " <> tshow err
       else pure False
 
     -- Step 2: configure remote (add or update)
@@ -131,7 +132,7 @@ instance Prop GitHomeDirCloneP where
     fetchArgs <- mkWSCmd ["git", "--git-dir", expandedGitDir, "fetch", "origin"]
     fetchResult <- cmd $ exe $ T.encodeUtf8 <$> fetchArgs
     case fetchResult of
-      Left err -> error $ "Failed to fetch from remote: " <> show err
+      Left err -> throwError $ WSFailure $ "Failed to fetch from remote: " <> tshow err
       Right _  -> pure ()
 
     -- Step 4: ensure local branch exists and tracks remote
@@ -148,7 +149,7 @@ instance Prop GitHomeDirCloneP where
     -- Step 6: soft-checkout files missing from homeDir
     lsResult <- gitLsTree expandedGitDir ("origin/" <> p.branch)
     case lsResult of
-      Left err -> error $ "Failed to list tracked files: " <> show err
+      Left err -> throwError $ WSFailure $ "Failed to list tracked files: " <> tshow err
       Right files -> do
         forM_ files $ \f -> do
           let destPath = expandedHomeDir <> "/" <> f
@@ -170,7 +171,7 @@ instance Prop GitHomeDirCloneP where
       result <- cmd $ exe $ T.encodeUtf8 <$> scriptArgs
       case result of
         Right _ -> pure ()
-        Left err -> error $ "Post-change script failed: " <> show err
+        Left err -> throwError $ WSFailure $ "Post-change script failed: " <> tshow err
 
   dependencies _ = return [IsProp HasGitP]
 
@@ -245,23 +246,23 @@ instance Prop HasGitP where
     case os of
       MacOS -> return [(IsProp HomebrewP)]
       Debian -> return [(IsProp AptUpdateP)]
-      Unknown -> error "error: Unknown OS, unable to install git"
+      Unknown -> throwError $ WSFailure "error: Unknown OS, unable to install git"
   fixer _ = do
     os <- detectOS
     case os of
-      Unknown -> error "error: Unknown OS, unable to install git"
+      Unknown -> throwError $ WSFailure "error: Unknown OS, unable to install git"
       MacOS -> do
         args' <- mkWSCmd ["brew", "install", "git"]
         result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
         case result of
           Right _ -> putStrLn' "Git installed successfully"
-          Left err -> error $ "Failed to install git: " ++ show err
+          Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
       Debian -> do
         args' <- mkWSCmd ["sudo", "apt-get", "install", "-y", "git"]
         result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
         case result of
           Right _ -> putStrLn' "Git installed successfully"
-          Left err -> error $ "Failed to install git: " ++ show err
+          Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
 
 resolveGitDir :: Text -> Text -> WS Text
 resolveGitDir homeDir gitDir

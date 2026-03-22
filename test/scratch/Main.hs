@@ -24,6 +24,7 @@ import WSHS hiding (main)
 import Control.Monad (forM_)
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class
 import System.Directory
 import System.FilePath ((</>))
@@ -40,10 +41,13 @@ import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 -- a stable property. Figure that out at some point.
 runWS :: WS a -> IO a
 runWS action = do
-  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing }
+  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
   let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
-  fst <$> runStateT (runReaderT (unWS action) settings) initialState
+  (result, _) <- runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
+  case result of
+    Left (WSFailure msg) -> fail $ "WS action failed: " <> T.unpack msg
+    Right a -> pure a
 
 -- | Create a test file with content
 createTestFile :: FilePath -> String -> IO ()

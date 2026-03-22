@@ -24,6 +24,7 @@ import WSHS hiding (main)
 import Control.Monad (forM_)
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class
 import System.Directory
 import System.FilePath ((</>))
@@ -35,6 +36,7 @@ import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 import Data.Either (isRight)
 import qualified SudoSpec
 import qualified GitHomeDirSpec
+import Util
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state
@@ -46,7 +48,7 @@ runWS action = do
   let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
   let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
-  fst <$> runStateT (runReaderT (unWS action) settings) initialState
+  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
 
 -- | Run a WS action with a specific sudoCmd in Settings
 runWSWith :: String -> WS a -> IO a
@@ -54,7 +56,7 @@ runWSWith sc action = do
   let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
   let settings = Settings { opts = opts, sudoCmd = sc }
   let initialState = WSState { props = Set.empty }
-  fst <$> runStateT (runReaderT (unWS action) settings) initialState
+  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
 
 -- | Create a test file with content
 createTestFile :: FilePath -> String -> IO ()

@@ -6,6 +6,7 @@
 
 module WSHS.Properties.MacOS where
 
+import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
 import Shh (exe, devNull, (&>))
@@ -46,7 +47,7 @@ instance Prop XCodeCLIToolsP where
       void $ cmd $ exe $ T.encodeUtf8 <$> rmArgs
 
       case result of
-        Left err -> error $ "Failed to install Xcode CLI tools: " <> show err
+        Left err -> throwError $ WSFailure $ "Failed to install Xcode CLI tools: " <> tshow err
         Right _ -> putStrLn' "Xcode CLI tools installed successfully"
 
   dependencies _ = return []
@@ -80,5 +81,5 @@ instance Prop HomebrewBundleP where
     result <- cmd $ exe $ T.encodeUtf8 <$> args'
     case result of
       Right _ -> putStrLn' "Homebrew bundle installed."
-      Left err -> error $ "brew bundle install failed: " <> show err
+      Left err -> throwError $ WSFailure $ "brew bundle install failed: " <> tshow err
   dependencies _ = return [IsProp HomebrewP]

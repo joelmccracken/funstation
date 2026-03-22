@@ -11,6 +11,7 @@ import Data.Set (Set)
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Monad.Except (ExceptT, MonadError)
 
 -- Monad stack
 
@@ -19,7 +20,11 @@ data WSState =
   { props :: Set IsProp
   }
 
-type WSStack a = ReaderT Settings (StateT WSState IO) a
+data WSError
+  = WSFailure Text
+  deriving (Show)
+
+type WSStack a = ReaderT Settings (ExceptT WSError (StateT WSState IO)) a
 
 data Settings = Settings
   { opts :: Options
@@ -45,6 +50,7 @@ newtype WS a
   , Applicative
   , Functor
   , MonadIO
+  , MonadError WSError
   )
 
 -- Enum/command types

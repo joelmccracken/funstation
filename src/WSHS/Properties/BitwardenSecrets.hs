@@ -23,6 +23,7 @@ import System.Environment (getEnv, setEnv, unsetEnv)
 import System.Directory (doesFileExist, createDirectoryIfMissing)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Control.Monad (forM_, void)
+import Control.Monad.Except (throwError)
 import Control.Monad.IO.Class (liftIO)
 
 -- ---------------------------------------------------------------------------
@@ -112,7 +113,7 @@ instance Prop BitwardenSecretsP where
     putStrLn' "  Unlocking Bitwarden vault..."
     tokenResult <- bwCmd ["unlock", "--passwordfile", passFile, "--raw"]
     token <- case tokenResult of
-      Left err -> error $ "bw unlock failed: " <> show err
+      Left err -> throwError $ WSFailure $ "bw unlock failed: " <> tshow err
       Right t  -> return $ TL.unpack $ TL.decodeUtf8 t
 
     -- Set BW_SESSION for all subsequent bw calls.
@@ -123,15 +124,15 @@ instance Prop BitwardenSecretsP where
     putStrLn' "  Syncing Bitwarden vault..."
     syncResult <- bwCmd ["sync"]
     case syncResult of
-      Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("bw sync failed: " <> show err)
+      Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "bw sync failed: " <> tshow err }
       Right _  -> return ()
 
     -- 4. Find or create bww_files folder
     foldersResult <- bwCmd ["list", "folders", "--search", "bww_files"]
     folderId <- case foldersResult of
-      Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("bw list folders failed: " <> show err)
+      Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "bw list folders failed: " <> tshow err }
       Right bs -> case eitherDecode bs :: Either String [BwFolder] of
-        Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("Failed to parse folders JSON: " <> err)
+        Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "Failed to parse folders JSON: " <> T.pack err }
         Right folders -> case filter (\f -> f.name == "bww_files") folders of
           (f:_) -> return f.id
           [] -> do
@@ -140,17 +141,17 @@ instance Prop BitwardenSecretsP where
             createArgs <- mkWSCmd ["bash", "-c", script]
             createResult <- cmd $ exe (T.encodeUtf8 <$> createArgs) |> captureTrim
             case createResult of
-              Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("bw create folder failed: " <> show err)
+              Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "bw create folder failed: " <> tshow err }
               Right bs2 -> case eitherDecode bs2 :: Either String BwFolder of
-                Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("Failed to parse folder creation response: " <> err)
+                Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "Failed to parse folder creation response: " <> T.pack err }
                 Right f  -> return f.id
 
     -- 5. List items in the folder
     itemsResult <- bwCmd ["list", "items", "--folderid", folderId]
     items <- case itemsResult of
-      Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("bw list items failed: " <> show err)
+      Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "bw list items failed: " <> tshow err }
       Right bs -> case eitherDecode bs :: Either String [BwItem] of
-        Left err -> liftIO (unsetEnv "BW_SESSION") >> error ("Failed to parse items JSON: " <> err)
+        Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "Failed to parse items JSON: " <> T.pack err }
         Right is -> return is
 
     -- 6. Write each file item to disk

@@ -23,12 +23,14 @@ import Options.Applicative qualified as App
 import Data.Text qualified as T
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
-import Control.Monad (void, forM_)
+import Control.Monad (forM_)
 import Control.Concurrent (killThread)
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Monad.Except (runExceptT)
 import Data.Set (Set)
+import System.Exit (exitFailure)
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
@@ -132,19 +134,37 @@ main = do
     else pure Nothing
 
   case opts.command of
-    Bootstrap cfgPath ws -> do
-      cfg <- decodeFileThrow cfgPath :: IO Configuration
-      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings { opts = opts, sudoCmd = "sudo" }) $ unWS $ do
-        liftIO $ print cfg
+    Bootstrap cfgPath ws -> doBootstrap opts cfgPath ws
+    Nix NixRestart ->  doNixRestart opts
+
+  -- Clean up sudo refresh thread
+  maybe (pure ()) killThread  sudoThread
+ where
+  doBootstrap opts cfgPath ws = do
+    cfg <- decodeFileThrow cfgPath :: IO Configuration
+    (result, _) <- runStateT
+      (runExceptT (runReaderT (unWS $ do
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
         ensureProperty (IsProp BasicSetupP)
         ensureProperty (IsProp WSConfigDirP { configDir = cfg.configDir, configRepoUrl = cfg.configRepoUrl, configRepoBranch = cfg.configRepoBranch })
-        forM_ (getProp <$> cfg.properties) ensureProperty
-    Nix NixRestart ->
-      void $ flip runStateT (WSState { props = mempty }) $ flip runReaderT (Settings { opts = opts, sudoCmd = "sudo" }) $ unWS restartNixDaemon
+        forM_ (getProp <$> cfg.properties) ensureProperty)
+        (Settings { opts = opts, sudoCmd = "sudo" })))
+      (WSState { props = mempty })
+    case result of
+      Left (WSFailure msg) -> do
+        putStrLn $ "wshs: error: " <> T.unpack msg
+        exitFailure
+      Right _ -> pure ()
 
-  -- Clean up sudo refresh thread
-  case sudoThread of
-    Just tid -> killThread tid
-    Nothing -> pure ()
+  doNixRestart opts = do
+    (result, _) <- runStateT
+      (runExceptT (runReaderT (unWS restartNixDaemon)
+        (Settings { opts = opts, sudoCmd = "sudo" })))
+      (WSState { props = mempty })
+    case result of
+      Left (WSFailure msg) -> do
+        putStrLn $ "wshs: error: " <> T.unpack msg
+        exitFailure
+      Right _ -> pure ()
+

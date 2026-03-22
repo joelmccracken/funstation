@@ -9,6 +9,7 @@ import Data.Text qualified as T
 import Data.Set qualified as Set
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
+import Control.Monad.Except (runExceptT)
 import System.Directory
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -16,6 +17,7 @@ import Shh.Internal (exe)
 
 import WSHS.Types
 import WSHS.Properties.Git (GitHomeDirCloneP (..))
+import Util
 
 -- | Run a WS action with a minimal configuration
 runWS :: WS a -> IO a
@@ -23,7 +25,7 @@ runWS action = do
   let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
   let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
-  fst <$> runStateT (runReaderT (unWS action) settings) initialState
+  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
 
 -- | Run a git command in a specific directory, ignoring its result.
 git :: [String] -> IO ()
