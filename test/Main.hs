@@ -20,7 +20,7 @@ import Data.Text.Lazy.Encoding qualified as TL
 
 -- import Data.Text.Encoding (encodeUtf8)
 import Data.Yaml (decodeThrow)
-import WSHS hiding (main)
+import WSHS hiding (main, failLeft)
 import Control.Monad (forM_)
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)

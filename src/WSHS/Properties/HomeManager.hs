@@ -84,8 +84,9 @@ instance Prop HomeManagerP where
               <> flakeOut
     args' <- mkWSCmd ["bash", "-c", runCmd]
     result <- cmd $ exe $ T.encodeUtf8 <$> args'
-    case result of
-      Right _ -> putStrLn' "Home Manager configuration activated."
-      Left err -> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err
+    either
+      (\err-> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err)
+      (const $ putStrLn' "Home Manager configuration activated.")
+      result
 
   dependencies _ = return []

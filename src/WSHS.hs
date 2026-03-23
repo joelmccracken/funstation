@@ -140,27 +140,28 @@ main = do
 
   case opts.command of
     Bootstrap cfgPath ws -> doBootstrap opts cfgPath ws
-    Nix NixRestart ->  doNixRestart opts
+    Nix NixRestart -> doNixRestart opts
 
   -- Clean up sudo refresh thread
   maybe (pure ()) killThread  sudoThread
  where
   doBootstrap opts cfgPath ws = do
     cfg <- decodeFileThrow cfgPath :: IO Configuration
-    (result, _) <- runStateT
-      (runExceptT (runReaderT (do
-          putStrLn' $ "Workstation: " <> ws
-          putStrLn' "\nEnsuring properties..."
-          ensureProperty (IsProp BasicSetupP)
-          ensureProperty (IsProp $ configDirProp cfg)
-          forM_ (getProp <$> cfg.properties) ensureProperty)
-        (settings opts)))
-      wsState
-    case result of
-      Left (WSFailure msg) -> do
-        putStrLn $ "wshs: error: " <> T.unpack msg
-        exitFailure
-      Right _ -> pure ()
+    let
+      bootstrapAct = do
+        putStrLn' $ "Workstation: " <> ws
+        putStrLn' "\nEnsuring properties..."
+        ensureProperty (IsProp BasicSetupP)
+        ensureProperty (IsProp $ configDirProp cfg)
+        forM_ (getProp <$> cfg.properties) ensureProperty
+    result <-
+      evalStateT
+        (runExceptT
+           (runReaderT
+              bootstrapAct
+              (settings opts)))
+        wsState
+    failLeft result
 
   wsState = WSState { props = mempty }
   settings opts = Settings { opts = opts, sudoCmd = "sudo" }
@@ -173,13 +174,14 @@ main = do
     }
 
   doNixRestart opts = do
-    (result, _) <- runStateT
-      (runExceptT (runReaderT restartNixDaemon
-        (Settings { opts = opts, sudoCmd = "sudo" })))
-      (WSState { props = mempty })
-    case result of
-      Left (WSFailure msg) -> do
-        putStrLn $ "wshs: error: " <> T.unpack msg
-        exitFailure
-      Right _ -> pure ()
+    result <-
+      runExceptT (runReaderT restartNixDaemon
+        (Settings { opts = opts, sudoCmd = "sudo" }))
+    failLeft result
 
+failLeft :: MonadIO m => Either WSError a -> m a
+failLeft = either (liftIO . handleFail) pure
+ where
+  handleFail (WSFailure msg) = do
+    putStrLn $ "wshs: error: " <> T.unpack msg
+    exitFailure
