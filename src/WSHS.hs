@@ -140,7 +140,6 @@ main = do
  where
   doBootstrap opts cfgPath ws = do
     cfg <- decodeFileThrow cfgPath :: IO Configuration
-    let state' = WSState { props = mempty }
     (result, _) <- runStateT
       (runExceptT (runReaderT (unWS $ do
           putStrLn' $ "Workstation: " <> ws
@@ -148,13 +147,16 @@ main = do
           ensureProperty (IsProp BasicSetupP)
           ensureProperty (IsProp $ configDirProp cfg)
           forM_ (getProp <$> cfg.properties) ensureProperty)
-        (Settings { opts = opts, sudoCmd = "sudo" })))
-      state'
+        (settings opts)))
+      wsState
     case result of
       Left (WSFailure msg) -> do
         putStrLn $ "wshs: error: " <> T.unpack msg
         exitFailure
       Right _ -> pure ()
+
+  wsState = WSState { props = mempty }
+  settings opts = Settings { opts = opts, sudoCmd = "sudo" }
 
   configDirProp cfg =
     WSConfigDirP

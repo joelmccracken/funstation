@@ -15,7 +15,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Maybe (fromMaybe)
 import Control.Monad (unless, when)
-import qualified Data.Map.Strict as Map
+-- import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
@@ -34,10 +34,7 @@ nixDaemonProfile = "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
 
 instance Prop NixDaemonP where
   desc _ = "Nix package manager (daemon mode)"
-  attrs p = Map.fromList
-    [ ("version", fromMaybe defaultNixVersion p.version)
-    , ("interactive", tshow p.interactive)
-    ]
+  attrs _ = mempty
   checker p = do
     nixInstalled <- hasCmd' "nix"
     if not nixInstalled
