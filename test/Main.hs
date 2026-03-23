@@ -45,7 +45,7 @@ import Util
 -- a stable property. Figure that out at some point.
 runWS :: WS a -> IO a
 runWS action = do
-  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
+  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False }
   let settings = Settings { opts = opts, sudoCmd = "sudo" }
   let initialState = WSState { props = Set.empty }
   failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
@@ -53,7 +53,7 @@ runWS action = do
 -- | Run a WS action with a specific sudoCmd in Settings
 runWSWith :: String -> WS a -> IO a
 runWSWith sc action = do
-  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False }
+  let opts = Options { command = Bootstrap "" "", sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False }
   let settings = Settings { opts = opts, sudoCmd = sc }
   let initialState = WSState { props = Set.empty }
   failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState

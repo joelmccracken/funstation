@@ -29,7 +29,7 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except (MonadError, runExceptT)
 import Data.Set (Set)
-import System.Exit (exitFailure)
+import System.Exit (exitFailure, exitSuccess)
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
@@ -85,6 +85,11 @@ optionsParser = Options
       ( long "verbose"
      <> short 'v'
      <> help "Print each command before running it"
+      )
+  <*> switch
+      ( long "interactive"
+     <> short 'i'
+     <> help "Prompt before each command; implies --verbose"
       )
 
 parseOptions :: IO Options
@@ -185,3 +190,6 @@ failLeft = either (liftIO . handleFail) pure
   handleFail (WSFailure msg) = do
     putStrLn $ "wshs: error: " <> T.unpack msg
     exitFailure
+  handleFail WSAborted = do
+    putStrLn "Run aborted."
+    exitSuccess

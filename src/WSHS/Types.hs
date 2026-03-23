@@ -22,6 +22,7 @@ data WSState =
 
 data WSError
   = WSFailure Text
+  | WSAborted
   deriving (Show)
 
 type WSStack a = ReaderT Settings (ExceptT WSError (StateT WSState IO)) a
@@ -36,6 +37,7 @@ data Options = Options
   , sudoCache :: Bool  -- ^ If True, cache sudo credentials and refresh in background
   , sudoPassFile :: Maybe Text  -- ^ Optional path to file containing sudo password
   , verbose :: Bool  -- ^ If True, print each command before running it
+  , interactive :: Bool  -- ^ If True, prompt user before each command
   }
   deriving (Show)
 

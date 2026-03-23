@@ -18,6 +18,7 @@ import Control.Monad (void, unless, when)
 import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, asks)
+import System.IO (hFlush, stdout)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
 import GHC.Stack (withFrozenCallStack)
@@ -59,7 +60,7 @@ fileExists :: MonadIO m => Text -> m Bool
 fileExists path = isRight <$> cmd (exe "test" "-e" (T.unpack path))
 
 -- | Create a directory (and any missing parents).
-mkDir :: (MonadIO m, MonadReader Settings m) => Text -> m ()
+mkDir :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
 mkDir path = do
   args' <- mkWSCmd ["mkdir", "-p", path]
   void $ cmd $ exe $ T.encodeUtf8 <$> args'
@@ -90,7 +91,7 @@ getOwnerGroup path = do
 -- | Run a privilege-escalating command in the WS monad.
 -- Reads the sudo command from Settings; uses AccessMode to choose the
 -- permission check (read or write).
-privCmd :: (MonadIO m, MonadReader Settings m) => AccessMode -> Text -> [Text] -> m (Either Failure ())
+privCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => AccessMode -> Text -> [Text] -> m (Either Failure ())
 privCmd mode pth args = do
   sc <- asks (.sudoCmd)
 
@@ -98,10 +99,20 @@ privCmd mode pth args = do
   c' <- mkWSCmd c
   cmd $ exe $ T.encodeUtf8 <$> c'
 
-mkWSCmd :: (MonadIO m, MonadReader Settings m) => [Text] -> m [Text]
+mkWSCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [Text] -> m [Text]
 mkWSCmd c = do
-  v <- asks (.opts.verbose)
-  when v $ liftIO $ TIO.putStrLn $ "running: " <> T.intercalate " " c
+  inter <- asks (.opts.interactive)
+  v     <- asks (.opts.verbose)
+  when (v || inter) $ liftIO $ TIO.putStrLn $ "running: " <> T.intercalate " " c
+  when inter $ do
+    response <-
+      liftIO $ do
+        TIO.putStr "Continue? [c/q]: "
+        hFlush stdout
+        liftIO getLine
+    case response of
+      "q" -> throwError WSAborted
+      _   -> pure ()
   pure c
 
 
