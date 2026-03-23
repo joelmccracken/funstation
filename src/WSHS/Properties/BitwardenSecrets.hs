@@ -24,7 +24,8 @@ import System.Directory (doesFileExist, createDirectoryIfMissing)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Control.Monad (forM_, void)
 import Control.Monad.Except (throwError)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader (MonadReader)
 
 -- ---------------------------------------------------------------------------
 -- Data type
@@ -49,7 +50,7 @@ data BwItem = BwItem
 -- Helpers
 
 -- | Run a bw command via bash, suppressing Node.js deprecation warnings.
-bwCmd :: [Text] -> WS (Either Failure LBS.ByteString)
+bwCmd :: (MonadIO m, MonadReader Settings m) => [Text] -> m (Either Failure LBS.ByteString)
 bwCmd args = do
   let shellCmd = "NODE_OPTIONS='--no-deprecation' bw " <> T.unwords args
   args' <- mkWSCmd ["bash", "-c", shellCmd]

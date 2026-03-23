@@ -17,15 +17,15 @@ import System.FilePath (takeDirectory)
 import Control.Monad (void, unless, when)
 import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
-import Control.Monad.Reader (asks)
+import Control.Monad.Reader (MonadReader, asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
 import GHC.Stack (withFrozenCallStack)
-import Control.Monad.Except (throwError)
+import Control.Monad.Except (MonadError, throwError)
 import WSHS.Types
 import WSHS.Sudo
 
-detectOS :: WS OS
+detectOS :: (MonadIO m, MonadError WSError m) => m OS
 detectOS = do
   osCheck  <- cmd (exe "uname" "-s" |> captureTrim)
   case osCheck of
@@ -34,7 +34,7 @@ detectOS = do
     Right "Linux" -> detectLinuxOS
     Right _ -> return Unknown
 
-detectLinuxOS :: WS OS
+detectLinuxOS :: MonadIO m => m OS
 detectLinuxOS = do
   -- Check if it's Debian-based
   debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
@@ -42,30 +42,30 @@ detectLinuxOS = do
     Right _ -> return Debian
     Left _ -> return Unknown
 
-which :: Text -> WS (Maybe Text)
+which :: MonadIO m => Text -> m (Maybe Text)
 which cmdName = do
   result <- cmd (exe "which" (T.unpack cmdName) |> captureTrim)
   pure $ either (const Nothing) (Just . TL.toStrict . TL.decodeUtf8) result
 
-hasCmd' :: Text -> WS Bool
+hasCmd' :: MonadIO m => Text -> m Bool
 hasCmd' cmdName = isJust <$> which cmdName
 
 -- | Check if a directory exists.
-dirExists :: Text -> WS Bool
+dirExists :: MonadIO m => Text -> m Bool
 dirExists path = isRight <$> cmd (exe "test" "-d" (T.unpack path))
 
 -- | Check if a file (or any path) exists.
-fileExists :: Text -> WS Bool
+fileExists :: MonadIO m => Text -> m Bool
 fileExists path = isRight <$> cmd (exe "test" "-e" (T.unpack path))
 
 -- | Create a directory (and any missing parents).
-mkDir :: Text -> WS ()
+mkDir :: (MonadIO m, MonadReader Settings m) => Text -> m ()
 mkDir path = do
   args' <- mkWSCmd ["mkdir", "-p", path]
   void $ cmd $ exe $ T.encodeUtf8 <$> args'
 
 -- | Ensure a parent directory exists, using sudo only if needed.
-ensureParentDir :: Text -> WS ()
+ensureParentDir :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
 ensureParentDir path = do
   let parentDir = T.pack $ takeDirectory (T.unpack path)
   exists <- dirExists parentDir
@@ -77,7 +77,7 @@ ensureParentDir path = do
 
 -- | Get "owner:group" for a path, for use with chown.
 -- Uses ls -ld which works on both macOS and Linux.
-getOwnerGroup :: Text -> WS Text
+getOwnerGroup :: MonadIO m => Text -> m Text
 getOwnerGroup path = do
   result <- cmd (exe "ls" "-ld" (T.unpack path) |> captureTrim)
   case result of
@@ -90,7 +90,7 @@ getOwnerGroup path = do
 -- | Run a privilege-escalating command in the WS monad.
 -- Reads the sudo command from Settings; uses AccessMode to choose the
 -- permission check (read or write).
-privCmd :: AccessMode -> Text -> [Text] -> WS (Either Failure ())
+privCmd :: (MonadIO m, MonadReader Settings m) => AccessMode -> Text -> [Text] -> m (Either Failure ())
 privCmd mode pth args = do
   sc <- asks (.sudoCmd)
 
@@ -98,7 +98,7 @@ privCmd mode pth args = do
   c' <- mkWSCmd c
   cmd $ exe $ T.encodeUtf8 <$> c'
 
-mkWSCmd :: [Text] -> WS [Text]
+mkWSCmd :: (MonadIO m, MonadReader Settings m) => [Text] -> m [Text]
 mkWSCmd c = do
   v <- asks (.opts.verbose)
   when v $ liftIO $ TIO.putStrLn $ "running: " <> T.intercalate " " c
@@ -106,7 +106,7 @@ mkWSCmd c = do
 
 
 -- | Move a file to a timestamped backup, using sudo only if needed.
-mvToBackupAuto :: Text -> WS Text
+mvToBackupAuto :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m Text
 mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
@@ -118,12 +118,12 @@ mvToBackupAuto path = do
     Left err -> throwError $ WSFailure $ "Failed to backup file: " <> tshow err
 
 {-# DEPRECATED mvToBackupSudo "Use mvToBackupAuto instead" #-}
-mvToBackupSudo :: Text -> WS Text
+mvToBackupSudo :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m Text
 mvToBackupSudo = mvToBackupAuto
 
 -- | Check if a file has the desired contents.
 -- Returns True if the file exists and matches, False otherwise.
-fileContentsCheck :: Text -> Text -> WS Bool
+fileContentsCheck :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> Text -> m Bool
 fileContentsCheck path content = do
   -- Create temp file with desired content
   tempFileResult <- cmd (exe "mktemp" |> captureTrim)
@@ -157,7 +157,7 @@ fileContentsCheck path content = do
 -- Returns Nothing if no change was needed, Just backupPath if the file was updated.
 -- The backupPath will be empty string if no backup was needed (file didn't exist).
 -- TODO think about what parts to reuse/share (e.g. with dotfiles code)
-fileContentsFix :: Text -> Text -> WS (Maybe Text)
+fileContentsFix :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> Text -> m (Maybe Text)
 fileContentsFix path content = do
   -- First check if file already has correct contents
   isCorrect <- fileContentsCheck path content
@@ -200,19 +200,19 @@ fileContentsFix path content = do
 tshow :: Show s => s -> Text
 tshow = T.pack . show
 
-cmd :: Proc a -> WS (Either Failure a)
+cmd :: MonadIO m => Proc a -> m (Either Failure a)
 cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
-putStrLn' :: Text -> WS ()
+putStrLn' :: MonadIO m => Text -> m ()
 putStrLn' t = liftIO $ putStrLn $ T.unpack t
 
 -- | Expand a path using bash filename expansion (resolves ~, $HOME, etc.)
-expandPath :: Text -> WS Text
+expandPath :: MonadIO m => Text -> m Text
 expandPath path = do
   result <- cmd $ (exe ["bash", "-c", ("echo " <> T.unpack path)] |> captureTrim)
   pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
 
-mvToBackup :: Text -> WS ()
+mvToBackup :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
 mvToBackup path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
@@ -223,7 +223,7 @@ mvToBackup path = do
     Left err -> throwError $ WSFailure $ "Failed to move file: " <> tshow err
 
 -- | Restart the Nix daemon (OS-aware)
-restartNixDaemon :: WS ()
+restartNixDaemon :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m ()
 restartNixDaemon = do
   os <- detectOS
   case os of

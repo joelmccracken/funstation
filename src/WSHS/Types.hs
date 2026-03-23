@@ -76,9 +76,9 @@ class Prop p where
   desc :: p -> Text
   attrs :: p -> Map.Map Text Text
   -- checker: return true if property already fulfilled, false if fixer is required
-  checker :: p -> WS Bool
-  fixer :: p -> WS ()
-  dependencies :: p -> WS [IsProp]
+  checker      :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => p -> m Bool
+  fixer        :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => p -> m ()
+  dependencies :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => p -> m [IsProp]
 
 data IsProp where
   IsProp :: Prop p => p -> IsProp

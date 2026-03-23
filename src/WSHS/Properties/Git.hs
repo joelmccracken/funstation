@@ -22,7 +22,7 @@ import Data.Bool (bool)
 import Data.Maybe (fromMaybe)
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Control.Monad (when, unless, void, forM_, forM)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
@@ -33,13 +33,13 @@ gitDirCmd :: Text -> [String] -> Proc ()
 gitDirCmd dir args = exe $ ["git", "--git-dir", T.unpack dir] ++ args
 
 -- | Get the remote URL for a named remote in a bare git dir.
-gitDirRemoteUrl :: Text -> Text -> WS (Either Failure Text)
+gitDirRemoteUrl :: MonadIO m => Text -> Text -> m (Either Failure Text)
 gitDirRemoteUrl gitDir name = do
   result <- cmd (gitDirCmd gitDir ["remote", "get-url", T.unpack name] |> captureTrim)
   pure $ fmap (TL.toStrict . TL.decodeUtf8) result
 
 -- | List all tracked file paths under a treeish in a bare git dir.
-gitLsTree :: Text -> Text -> WS (Either Failure [Text])
+gitLsTree :: MonadIO m => Text -> Text -> m (Either Failure [Text])
 gitLsTree gitDir treeish = do
   result <- cmd (gitDirCmd gitDir ["ls-tree", "-r", "--name-only", T.unpack treeish] |> captureTrim)
   pure $ fmap (filter (not . T.null) . T.lines . TL.toStrict . TL.decodeUtf8) result
@@ -63,7 +63,7 @@ instance Prop GitHomeDirCloneP where
 
   checker p = do
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
-    expandedGitDir <- expandPath p.gitDir >>= resolveGitDir expandedHomeDir
+    expandedGitDir <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
 
     -- 1. Git dir must exist
     gitDirExists <- dirExists expandedGitDir
@@ -90,7 +90,7 @@ instance Prop GitHomeDirCloneP where
 
   fixer p = do
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
-    expandedGitDir <- expandPath p.gitDir >>= resolveGitDir expandedHomeDir
+    expandedGitDir <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
 
     changed <- liftIO $ newIORef False
 
@@ -264,7 +264,7 @@ instance Prop HasGitP where
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
 
-resolveGitDir :: Text -> Text -> WS Text
+resolveGitDir :: Text -> Text -> Text
 resolveGitDir homeDir gitDir
-  | "/" `T.isPrefixOf` gitDir = pure gitDir
-  | otherwise                 = pure $ homeDir <> "/" <> gitDir
+  | "/" `T.isPrefixOf` gitDir = gitDir
+  | otherwise                 = homeDir <> "/" <> gitDir

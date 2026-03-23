@@ -27,7 +27,7 @@ import Control.Monad (forM_)
 import Control.Concurrent (killThread)
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Except (runExceptT)
+import Control.Monad.Except (MonadError, runExceptT)
 import Data.Set (Set)
 import System.Exit (exitFailure)
 
@@ -95,7 +95,14 @@ parseOptions =
       <> header "wshs - manage workstation configurations"
     )
 
-ensureProperty :: Prop p => p -> WS ()
+ensureProperty
+  :: ( Prop p
+     , MonadIO m
+     , MonadReader Settings m
+     , MonadError WSError m
+     , MonadState WSState m
+     )
+  => p -> m ()
 ensureProperty prop = do
   wsstate <- get
   let
@@ -141,7 +148,7 @@ main = do
   doBootstrap opts cfgPath ws = do
     cfg <- decodeFileThrow cfgPath :: IO Configuration
     (result, _) <- runStateT
-      (runExceptT (runReaderT (unWS $ do
+      (runExceptT (runReaderT (do
           putStrLn' $ "Workstation: " <> ws
           putStrLn' "\nEnsuring properties..."
           ensureProperty (IsProp BasicSetupP)
@@ -167,7 +174,7 @@ main = do
 
   doNixRestart opts = do
     (result, _) <- runStateT
-      (runExceptT (runReaderT (unWS restartNixDaemon)
+      (runExceptT (runReaderT restartNixDaemon
         (Settings { opts = opts, sudoCmd = "sudo" })))
       (WSState { props = mempty })
     case result of

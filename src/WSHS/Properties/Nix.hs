@@ -58,7 +58,6 @@ instance Prop NixDaemonP where
     putStrLn' "Nix daemon setup complete."
 
     where
-      installNix :: WS ()
       installNix = do
         let ver = fromMaybe defaultNixVersion p.version
         let installerUrl = "https://releases.nixos.org/nix/nix-" <> ver <> "/install"
@@ -85,7 +84,6 @@ instance Prop NixDaemonP where
 
         restartNixDaemon
 
-      updateNixConf :: WS ()
       updateNixConf = case p.nixConf of
         Nothing -> pure ()
         Just desiredConf -> do

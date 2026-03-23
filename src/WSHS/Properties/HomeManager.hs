@@ -14,7 +14,8 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Data.Aeson (eitherDecode, FromJSON)
-import Control.Monad.Reader (ask)
+import Control.Monad.Reader (MonadReader, ask)
+import Control.Monad.Except (MonadError)
 import Control.Monad.IO.Class (liftIO)
 import System.Environment (getEnv)
 import GHC.Generics (Generic)
@@ -40,7 +41,7 @@ mkFlakeOut workstation = do
   username <- T.pack <$> getEnv "USER"
   pure $ ".#homeConfigurations.\"" <> username <> "@" <> workstation <> "\".activationPackage"
 
-getWorkstation :: WS Text
+getWorkstation :: (MonadReader Settings m, MonadError WSError m) => m Text
 getWorkstation = do
   settings <- ask
   case settings.opts.command of
