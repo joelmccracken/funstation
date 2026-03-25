@@ -94,8 +94,6 @@ instance Prop GitHomeDirCloneP where
 
     changed <- liftIO $ newIORef False
 
-
-
     gitDirExists <- dirExists expandedGitDir
 
     didInitializeGitDir <-
@@ -142,7 +140,15 @@ instance Prop GitHomeDirCloneP where
     args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "branch", "--set-upstream-to", remoteBranch, p.branch]
     void $ cmd $ exe $ T.encodeUtf8 <$> args'
 
+    -- Switch HEAD to the correct branch and reset index to match it
+    void $ cmd $ exe $ T.encodeUtf8 <$>
+      ["git", "--git-dir", expandedGitDir, "symbolic-ref", "HEAD", "refs/heads/" <> p.branch]
+    void $ cmd $ exe $ T.encodeUtf8 <$>
+      ["git", "--git-dir", expandedGitDir, "read-tree", p.branch]
+
+
     -- Step 5: ensure homeDir exists
+
     homeDirExists <- dirExists expandedHomeDir
     unless homeDirExists $ mkDir expandedHomeDir
 

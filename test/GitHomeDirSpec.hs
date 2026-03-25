@@ -13,7 +13,7 @@ import Control.Monad.Except (runExceptT)
 import System.Directory
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
-import Shh.Internal (exe)
+import Shh.Internal (exe, captureTrim, (|>))
 
 import WSHS.Types
 import WSHS.Properties.Git (GitHomeDirCloneP (..))
@@ -182,8 +182,15 @@ spec = describe "GitHomeDirCloneP" $ do
     it "git status works from homeDir when gitDir is relative '.git'" $ withGitHomeTest $ \remoteDir _gitDir fakeHome -> do
       let p = mkProp remoteDir ".git" fakeHome Nothing
       runWS $ fixer p
-      withCurrentDirectory fakeHome $
-        git ["status"]
+      output <- withCurrentDirectory fakeHome $
+        exe (["git", "-c", "color.ui=never", "status"] :: [String]) |> captureTrim
+      let expectedStatus = mconcat
+            [ "On branch main\n"
+            , "Your branch is up to date with 'origin/main'.\n"
+            , "\n"
+            , "nothing to commit, working tree clean"
+            ]
+      output `shouldBe` expectedStatus
 
     it "is idempotent: second fixer run leaves files unchanged" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
