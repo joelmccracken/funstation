@@ -11,35 +11,21 @@ properties:
       remoteUrl: "git@github.com:joelmccracken/dotfiles.git"
       branch: wshs-new-technique
       homeDir: "~/temp_home"
-  # - type: Dotfiles
-  #   params:
-  #     srcDir: "~/.config/wshs/dotfiles"
-  #     files:
-  #       - { src: bashrc, dot: true, sort: Symlink, dir: false }
-  #       - { src: zshrc, dot: true, sort: Symlink, dir: false }
-  #       - { src: ghci, dot: true, sort: Symlink, dir: false }
-  #       - { src: gitconfig, dot: true, sort: Symlink, dir: false }
-  #       - { src: hammerspoon, dot: true, sort: Symlink, dir: false }
-  #       - { src: nix-channels, dot: true, sort: Symlink, dir: false }
-  #       - { src: npmrc, dot: true, sort: Symlink, dir: false }
-  #       - { src: config/git, dot: true, sort: Symlink, dir: true }
-  #       - { src: config/doom, dot: true, sort: Symlink, dir: true }
-  #       - { src: gitignore, dot: true, sort: Copy, dir: false }
-  # - type: NixDaemon
-  #   params:
-  #     interactive: False
-  #     nixConf: |
-  #       trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
-  #       substituters = https://cache.nixos.org https://cache.iog.io
-  #       experimental-features = nix-command flakes
-  #       trusted-users = root joelmccracken runner
-  #       build-users-group = nixbld
-  # - type: HomeManager
-  #   params:
-  #     dir: "~/.config/wshs/nix"
-  # - type: HomebrewBundle
-  #   params:
-  #     brewfile: "~/.config/wshs/Brewfile"
-  # - type: BitwardenSecrets
-  #   params:
-  #     syncIntervalDays: 7
+  - type: NixDaemon
+    params:
+      interactive: False
+      nixConf: |
+        trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+        substituters = https://cache.nixos.org https://cache.iog.io
+        experimental-features = nix-command flakes
+        trusted-users = root joelmccracken runner
+        build-users-group = nixbld
+  - type: HomeManager
+    params:
+      dir: "~/.config/wshs/nix"
+  - type: HomebrewBundle
+    params:
+      brewfile: "~/.config/wshs/Brewfile"
+  - type: BitwardenSecrets
+    params:
+      syncIntervalDays: 7
