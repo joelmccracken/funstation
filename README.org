@@ -4,14 +4,54 @@ Currently, this tool is heavily work-in-progress, but the eventual goal is:
 
 - a static(ish) executable precompiled for relevant
   systems, that is downloadable to a new workstation for initial setup
-  - TODO note what "staticish" means here
+  - Linux executables will be fully static.
+  - MacOS will have everything static besides the required system libraries.
 - Tool is written in haskell, though that should not matter to a potential user.
-  - note historic version in bash ("ws"), and haskell being chosen
 - has various "properties", expects a yaml file that declares the expected
   workstation configuration.
 
-* build, test, run
+* Config file example
 
+Here is an example of a simple config file. It shows roughly how I have my
+system set up currently
+
+#+begin_src yaml
+configDir: "~/.config/wshs"
+configRepoUrl: "https://github.com/joelmccracken/dotfiles"
+configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
+configRepoBranch: "master"
+workstations:
+  - workstationName: "aeglos"
+properties:
+  - type: GitHomeDirClone
+    params:
+      gitDir: .git-dir
+      remoteUrl: "git@github.com:joelmccracken/dotfiles.git"
+      branch: wshs-new-technique
+  - type: NixDaemon
+    params:
+      interactive: False
+      nixConf: |
+        trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+        substituters = https://cache.nixos.org https://cache.iog.io
+        experimental-features = nix-command flakes
+        trusted-users = root joelmccracken runner
+        build-users-group = nixbld
+  - type: HomeManager
+    params:
+      dir: "~/.config/wshs/nix"
+  - type: HomebrewBundle
+    params:
+      brewfile: "~/.config/wshs/Brewfile"
+  - type: BitwardenSecrets
+    params:
+      syncIntervalDays: 7
+#+end_src
+
+
+
+
+* build, test, run
 ** from within a nix develop session
 run with
 #+begin_src sh
