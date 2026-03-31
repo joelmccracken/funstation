@@ -26,6 +26,8 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
+import Control.Monad.Reader (MonadReader)
+import Control.Monad.Except (MonadError)
 
 
 -- | Build a git command scoped to a bare git dir.
@@ -33,15 +35,23 @@ gitDirCmd :: Text -> [String] -> Proc ()
 gitDirCmd dir args = exe $ ["git", "--git-dir", T.unpack dir] ++ args
 
 -- | Get the remote URL for a named remote in a bare git dir.
-gitDirRemoteUrl :: MonadIO m => Text -> Text -> m (Either Failure Text)
+gitDirRemoteUrl :: -- MonadIO m => Text -> Text -> m (Either Failure Text)
+  (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> Text -> m (Either Failure Text)
 gitDirRemoteUrl gitDir name = do
-  result <- cmd (gitDirCmd gitDir ["remote", "get-url", T.unpack name] |> captureTrim)
+  let theCmd =
+        ["git", "--git-dir", gitDir, "remote", "get-url", name]
+  args' <- mkWSCmd theCmd
+  result <- cmd ( (exe $ T.encodeUtf8 <$> args') |> captureTrim )
   pure $ fmap (TL.toStrict . TL.decodeUtf8) result
 
 -- | List all tracked file paths under a treeish in a bare git dir.
-gitLsTree :: MonadIO m => Text -> Text -> m (Either Failure [Text])
+-- gitLsTree :: MonadIO m => Text -> Text -> m (Either Failure [Text])
+gitLsTree :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> Text -> m (Either Failure [Text])
 gitLsTree gitDir treeish = do
-  result <- cmd (gitDirCmd gitDir ["ls-tree", "-r", "--name-only", T.unpack treeish] |> captureTrim)
+  let theCmd =
+        ["git", "--git-dir", gitDir, "ls-tree", "-r", "--full-tree", "--name-only", treeish]
+  args' <- mkWSCmd theCmd
+  result <- cmd ((exe $ T.encodeUtf8 <$> args')  |> captureTrim )
   pure $ fmap (filter (not . T.null) . T.lines . TL.toStrict . TL.decodeUtf8) result
 
 data GitHomeDirCloneP = GitHomeDirCloneP
@@ -102,11 +112,11 @@ instance Prop GitHomeDirCloneP where
         result <- cmd $ exe $ T.encodeUtf8 <$> args'
         case result of
           Right _ -> do
-            putStrLn' $ "Initialized bare repo at " <> expandedGitDir
             void $ cmd $ exe $ T.encodeUtf8 <$>
               ["git", "--git-dir", expandedGitDir, "config", "core.bare", "false"]
             void $ cmd $ exe $ T.encodeUtf8 <$>
               ["git", "--git-dir", expandedGitDir, "config", "core.worktree", expandedHomeDir]
+            putStrLn' $ "Initialized repo at " <> expandedGitDir
             liftIO $ writeIORef changed True
             pure True
           Left err -> throwError $ WSFailure $ "Failed to init bare repo: " <> tshow err
@@ -118,7 +128,7 @@ instance Prop GitHomeDirCloneP where
       Right currentUrl | currentUrl == p.remoteUrl ->
         pure ()  -- already correct
       Right _ -> do
-        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree=", expandedHomeDir, "remote", "set-url", "origin", p.remoteUrl]
+        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "add", "origin", p.remoteUrl]
         void $ cmd $ exe $ T.encodeUtf8 <$> args'
         liftIO $ writeIORef changed True
       Left _ -> do
@@ -146,7 +156,6 @@ instance Prop GitHomeDirCloneP where
     void $ cmd $ exe $ T.encodeUtf8 <$>
       ["git", "--git-dir", expandedGitDir, "read-tree", p.branch]
 
-
     -- Step 5: ensure homeDir exists
 
     homeDirExists <- dirExists expandedHomeDir
@@ -162,7 +171,11 @@ instance Prop GitHomeDirCloneP where
           exists <- fileExists destPath
           unless exists $ do
             putStrLn' $ "Checking out missing file: " <> f
-            coArgs <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "checkout", "origin/" <> p.branch, "--", f]
+            coArgs <- mkWSCmd ["bash", "-c", T.intercalate " "
+                                [ "cd ", expandedHomeDir, ";"
+                                , "git", "--git-dir", expandedGitDir
+                                , "--work-tree", expandedHomeDir
+                                , "checkout", "origin/" <> p.branch, "--", f]]
             result <- cmd $ exe $ T.encodeUtf8 <$> coArgs
             case result of
               Right _ -> liftIO $ writeIORef changed True
