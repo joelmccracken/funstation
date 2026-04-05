@@ -16,7 +16,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe, captureTrim, (|>))
 
 import WSHS.Types
-import WSHS.Properties.Git (GitHomeDirCloneP (..))
+import WSHS.Properties.Git (GitHomeDirP (..))
 import Util
 
 -- | Run a WS action with a minimal configuration
@@ -65,8 +65,8 @@ withGitHomeTest fn =
     fn remoteDir gitDir fakeHome
 
 -- | Build a property pointing at the given dirs.
-mkProp :: FilePath -> FilePath -> FilePath -> Maybe Text -> GitHomeDirCloneP
-mkProp remoteDir gitDir fakeHome afterChange = GitHomeDirCloneP
+mkProp :: FilePath -> FilePath -> FilePath -> Maybe Text -> GitHomeDirP
+mkProp remoteDir gitDir fakeHome afterChange = GitHomeDirP
   { gitDir         = T.pack gitDir
   , remoteUrl      = T.pack remoteDir
   , branch         = "main"
@@ -75,7 +75,7 @@ mkProp remoteDir gitDir fakeHome afterChange = GitHomeDirCloneP
   }
 
 spec :: Spec
-spec = describe "GitHomeDirCloneP" $ do
+spec = describe "GitHomeDirP" $ do
 
   -- ── Checker ──────────────────────────────────────────────────────────────
 

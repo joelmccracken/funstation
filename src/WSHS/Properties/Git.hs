@@ -50,11 +50,11 @@ gitLsTree :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -
 gitLsTree gitDir treeish = do
   let theCmd =
         ["git", "--git-dir", gitDir, "ls-tree", "-r", "--full-tree", "--name-only", treeish]
-  args' <- mkWSCmd theCmd
-  result <- cmd ((exe $ T.encodeUtf8 <$> args')  |> captureTrim )
+  wsCommand <- mkWSCmd theCmd
+  result <- cmd ((exe $ T.encodeUtf8 <$> wsCommand)  |> captureTrim )
   pure $ fmap (filter (not . T.null) . T.lines . TL.toStrict . TL.decodeUtf8) result
 
-data GitHomeDirCloneP = GitHomeDirCloneP
+data GitHomeDirP = GitHomeDirP
   { gitDir         :: Text        -- ^ path to bare git dir, e.g. "~/.git-home"
   , remoteUrl      :: Text        -- ^ remote URL to fetch from
   , branch         :: Text        -- ^ branch name, e.g. "main"
@@ -63,7 +63,7 @@ data GitHomeDirCloneP = GitHomeDirCloneP
   }
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
-instance Prop GitHomeDirCloneP where
+instance Prop GitHomeDirP where
   desc _ = "git home dir clone"
   attrs p = Map.fromList
     [ ("gitDir",    p.gitDir)
@@ -194,9 +194,6 @@ instance Prop GitHomeDirCloneP where
 
   dependencies _ = return [IsProp HasGitP]
 
-data GitTrackHomeDirP = GitTrackHomeDirP { gitDir :: Text }
-  deriving (Eq, Show, Generic, FromJSON, ToJSON)
-
 data HasGitP = HasGitP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
@@ -205,31 +202,6 @@ data GitMacOSP = GitMacOSP
 
 data GitDebianP = GitDebianP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
-
-instance Prop GitTrackHomeDirP where
-  desc _ = "git track home dir"
-  attrs p = Map.fromList [("gitDir", p.gitDir)]
-  checker p = do
-    expandedGitDir <- expandPath $ "$HOME/" <> p.gitDir
-    dirExists expandedGitDir
-  fixer p = do
-    expandedGitDir <- expandPath $ p.gitDir
-    let shellCmd = T.concat
-          [ "export GIT_DIR='", expandedGitDir, "'; "
-          , "("
-          , "cd $HOME; "
-          , "git init .; "
-          , "git config --local --get-all core.bare true >/dev/null && "
-          , "git config --local --replace-all core.bare false true "
-          , ")"
-          ]
-    args' <- mkWSCmd ["bash", "-c", shellCmd]
-    result <- cmd $ exe $ T.encodeUtf8 <$> args'
-    case result of
-      Right _ -> putStrLn' "home dir git tracking setup successfully"
-      Left err -> putStrLn' $ "Failed setting up home dir git tracking: " <> tshow err
-
-  dependencies _ = return [IsProp HasGitP]
 
 instance Prop GitMacOSP where
   desc _ = "git (macOS via Homebrew)"

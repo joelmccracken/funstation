@@ -23,7 +23,7 @@ configRepoBranch: "master"
 workstations:
   - workstationName: "aeglos"
 properties:
-  - type: GitHomeDirClone
+  - type: GitHomeDir
     params:
       gitDir: .git-dir
       remoteUrl: "git@github.com:joelmccracken/dotfiles.git"

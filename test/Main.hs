@@ -892,5 +892,5 @@ main = hspec $ do
   describe "sudo functionality" $  do
     SudoSpec.spec
 
-  describe "GitHomeDirCloneP" $
+  describe "GitHomeDirP" $
     GitHomeDirSpec.spec
