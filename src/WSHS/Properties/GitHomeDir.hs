@@ -18,9 +18,8 @@ import Data.Text.Encoding qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Maybe (fromMaybe)
-import Data.IORef (newIORef, readIORef, writeIORef)
 import Control.Monad (when, unless, void, forM_, forM)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
@@ -104,8 +103,6 @@ instance Prop GitHomeDirP where
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
     expandedGitDir <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
 
-    changed <- liftIO $ newIORef False
-
     gitDirExists <- dirExists expandedGitDir
 
     didInitializeGitDir <-
@@ -119,24 +116,25 @@ instance Prop GitHomeDirP where
             void $ cmd $ exe $ T.encodeUtf8 <$>
               ["git", "--git-dir", expandedGitDir, "config", "core.worktree", expandedHomeDir]
             putStrLn' $ "Initialized repo at " <> expandedGitDir
-            liftIO $ writeIORef changed True
             pure True
           Left err -> throwError $ WSFailure $ "Failed to init bare repo: " <> tshow err
       else pure False
 
     -- Step 2: configure remote (add or update)
     remoteResult <- gitDirRemoteUrl expandedGitDir "origin"
-    case remoteResult of
+    didSetRemoteUrl <- case remoteResult of
       Right currentUrl | currentUrl == p.remoteUrl ->
-        pure ()  -- already correct
+        pure False -- already correct
       Right _ -> do
-        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "add", "origin", p.remoteUrl]
+        -- TODO this branch needs to be tested
+        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "set-url", "origin", p.remoteUrl]
         void $ cmd $ exe $ T.encodeUtf8 <$> args'
-        liftIO $ writeIORef changed True
+        pure True
       Left _ -> do
+        -- TODO ensure this branch tested
         args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "remote", "add", "origin", p.remoteUrl]
         void $ cmd $ exe $ T.encodeUtf8 <$> args'
-        liftIO $ writeIORef changed True
+        pure True
 
     -- Step 3: fetch (always; errors out on failure)
     fetchArgs <- mkWSCmd ["git", "--git-dir", expandedGitDir, "fetch", "origin"]
@@ -165,13 +163,13 @@ instance Prop GitHomeDirP where
 
     -- Step 6: soft-checkout files missing from homeDir
     lsResult <- gitLsTree expandedGitDir ("origin/" <> p.branch)
-    case lsResult of
+    didChangeFiles <- case lsResult of
       Left err -> throwError $ WSFailure $ "Failed to list tracked files: " <> tshow err
       Right files -> do
-        forM_ files $ \f -> do
+        forM files $ \f -> do
           let destPath = expandedHomeDir <> "/" <> f
           exists <- fileExists destPath
-          unless exists $ do
+          if exists then pure False else do
             putStrLn' $ "Checking out missing file: " <> f
             coArgs <- mkWSCmd ["bash", "-c", T.intercalate " "
                                 [ "cd ", expandedHomeDir, ";"
@@ -180,12 +178,14 @@ instance Prop GitHomeDirP where
                                 , "checkout", "origin/" <> p.branch, "--", f]]
             result <- cmd $ exe $ T.encodeUtf8 <$> coArgs
             case result of
-              Right _ -> liftIO $ writeIORef changed True
-              Left err -> putStrLn' $ "Warning: failed to checkout " <> f <> ": " <> tshow err
+              Right _ -> pure True
+              Left err -> do
+                putStrLn' $ "Warning: failed to checkout " <> f <> ": " <> tshow err
+                pure False
 
     -- Step 7: run post-change script if anything changed
-    didChange <- liftIO $ readIORef changed
-    when (or [didChange, didInitializeGitDir]) $ forM_ p.runAfterChange $ \script -> do
+    let didChange = (or [didInitializeGitDir, didSetRemoteUrl, any (==True) didChangeFiles])
+    when didChange  $ forM_ p.runAfterChange $ \script -> do
       expandedScript <- expandPath script
       putStrLn' $ "Running post-change script: " <> expandedScript
       scriptArgs <- mkWSCmd ["bash", expandedScript]
