@@ -70,6 +70,9 @@ data Command
     , workstation :: Text
     }
   | Nix NixSubcommand
+  | Status
+    { configFile :: Maybe FilePath
+    }
   deriving (Show)
 
 -- Prop class and existential

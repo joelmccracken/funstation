@@ -11,20 +11,23 @@ import WSHS.Commands
 import WSHS.Configuration
 import WSHS.Properties.Dotfiles
 import WSHS.Properties.Git ()
-import WSHS.Properties.GitHomeDir ()
+import WSHS.Properties.GitHomeDir (resolveGitDir, GitHomeDirP(..))
 import WSHS.Properties.MacOS ()
 import WSHS.Properties.Debian ()
 import WSHS.Properties.Basic
 import WSHS.Properties.Nix ()
 import WSHS.Properties.HomeManager ()
 import WSHS.Properties.BitwardenSecrets ()
+import Shh (exe)
 
 import Options.Applicative
 import Options.Applicative qualified as App
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
+import Data.Maybe (fromMaybe)
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
-import Control.Monad (forM_)
+import Control.Monad (forM_, void)
 import Control.Concurrent (killThread)
 import Control.Monad.State
 import Control.Monad.Reader
@@ -49,6 +52,13 @@ bootstrapParser = Bootstrap
       ( metavar "WORKSTATION"
      <> help "Name of the current workstation. Usable by properties." )
 
+statusParser :: Parser Command
+statusParser = Status
+  <$> optional (strOption
+      ( long "config"
+     <> metavar "FILE"
+     <> help "Path to the configuration YAML file (default: ~/.config/wshs/config.yaml)" ))
+
 nixSubcommandParser :: Parser NixSubcommand
 nixSubcommandParser = subparser
   ( App.command "restart"
@@ -66,6 +76,10 @@ commandParser = subparser
  <> App.command "nix"
     ( info (Nix <$> nixSubcommandParser <**> helper)
       ( progDesc "Nix package manager utilities" )
+    )
+ <> App.command "status"
+    ( info (statusParser <**> helper)
+      ( progDesc "Show status of managed properties" )
     )
   )
 
@@ -146,6 +160,7 @@ main = do
   case opts.command of
     Bootstrap cfgPath ws -> doBootstrap opts cfgPath ws
     Nix NixRestart -> doNixRestart opts
+    Status mCfg -> doStatus opts mCfg
 
   -- Clean up sudo refresh thread
   maybe (pure ()) killThread  sudoThread
@@ -183,6 +198,28 @@ main = do
       runExceptT (runReaderT restartNixDaemon
         (Settings { opts = opts, sudoCmd = "sudo" }))
     failLeft result
+
+  doStatus opts mCfg = do
+    let cfgPath = fromMaybe "~/.config/wshs/config.yaml" (fmap T.pack mCfg)
+    expandedCfgPath <- T.unpack <$> expandPath cfgPath
+    cfg <- decodeFileThrow expandedCfgPath :: IO Configuration
+    let gitHomeDirs = [ p | GitHomeDir p <- cfg.properties ]
+    case gitHomeDirs of
+      [] -> putStrLn "Nothing to report."
+      (p:_) -> do
+        expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
+        expandedGitDir  <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
+        let
+          runGitStatus = do
+            args <- mkWSCmd [ "bash", "-c" , T.intercalate " "
+                                              [ "cd", expandedHomeDir, ";", "git", "--git-dir", expandedGitDir
+                                              , "status" ]
+                            ]
+            cmd $ exe (T.encodeUtf8 <$> args)
+
+        result <- runExceptT $ runReaderT runGitStatus
+          (Settings { opts = opts, sudoCmd = "sudo" })
+        void $ failLeft result
 
 failLeft :: MonadIO m => Either WSError a -> m a
 failLeft = either (liftIO . handleFail) pure

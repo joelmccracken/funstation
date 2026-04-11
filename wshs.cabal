@@ -90,7 +90,8 @@ library
         time,
         containers,
         filepath,
-        directory
+        directory,
+        process
 
     -- Directories containing source files.
     hs-source-dirs:   src
