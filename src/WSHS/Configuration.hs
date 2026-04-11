@@ -4,7 +4,7 @@
 
 module WSHS.Configuration where
 
-import WSHS.Properties.Git         (GitHomeDirP)
+import WSHS.Properties.GitHomeDir  (GitHomeDirP)
 import WSHS.Properties.Dotfiles    (DotfilesP)
 import WSHS.Properties.Nix         (NixDaemonP)
 import WSHS.Properties.HomeManager (HomeManagerP)

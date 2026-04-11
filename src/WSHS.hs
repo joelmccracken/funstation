@@ -11,6 +11,7 @@ import WSHS.Commands
 import WSHS.Configuration
 import WSHS.Properties.Dotfiles
 import WSHS.Properties.Git ()
+import WSHS.Properties.GitHomeDir ()
 import WSHS.Properties.MacOS ()
 import WSHS.Properties.Debian ()
 import WSHS.Properties.Basic
@@ -46,7 +47,7 @@ bootstrapParser = Bootstrap
      <> help "Path to the configuration YAML file" )
   <*> strArgument
       ( metavar "WORKSTATION"
-     <> help "Name of the current workstation" )
+     <> help "Name of the current workstation. Usable by properties." )
 
 nixSubcommandParser :: Parser NixSubcommand
 nixSubcommandParser = subparser

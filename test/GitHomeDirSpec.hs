@@ -16,7 +16,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe, captureTrim, (|>))
 
 import WSHS.Types
-import WSHS.Properties.Git (GitHomeDirP (..))
+import WSHS.Properties.GitHomeDir (GitHomeDirP (..))
 import Util
 
 -- | Run a WS action with a minimal configuration

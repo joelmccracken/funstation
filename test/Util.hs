@@ -4,7 +4,7 @@ import Test.Hspec
 import Data.Text qualified as T
 
 import WSHS.Types
-import WSHS.Properties.Git (GitHomeDirP (..))
+import WSHS.Properties.GitHomeDir (GitHomeDirP (..))
 
 
 
