@@ -1,5 +1,20 @@
 #+title: WSHS: a workstation configuration tool
 
+Software. Dotfiles. System configuration files. Secrets like private keys.
+
+All of these are required when setting up a computer.
+
+What's the problem with doing it manually every time?
+
+- It is easy to forget an essential piece of setup.
+- Its hard to remember how exactly you set up some tool years ago.
+- Personal scripts always seem to break when you need them most, often because
+  of setup issues/changes.
+
+Having a declarative, automated setup gives you confidence to automate more of
+your work. It gives you a firm foundation to build upon.
+
+* Project Status
 Currently, this tool is heavily work-in-progress, but the eventual goal is:
 
 - a static(ish) executable precompiled for relevant
@@ -47,10 +62,16 @@ properties:
     params:
       syncIntervalDays: 7
 #+end_src
-
-
-
-
+* Usage
+** Initial system setup
+*** downloading
+- download the appropriate executable from releases for your system.
+- create your `config.yaml`, or download your preexisting file.
+*** running
+on your system, run the bootstrap:
+#+begin_src sh
+wshs bootstrap config.yaml $YOUR_SYSTEM_NAME
+#+end_src
 * build, test, run
 ** from within a nix develop session
 run with
