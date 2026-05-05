@@ -44,9 +44,7 @@ mkFlakeOut workstation = do
 getWorkstation :: (MonadReader Settings m, MonadError WSError m) => m Text
 getWorkstation = do
   settings <- ask
-  case settings.opts.command of
-    Bootstrap { workstation = ws } -> return ws
-    _ -> throwError $ WSFailure "HomeManagerP can only be used from a Bootstrap command"
+  pure settings.opts.workstation
 
 instance Prop HomeManagerP where
   desc _ = "home-manager configuration"

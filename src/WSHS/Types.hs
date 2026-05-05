@@ -38,6 +38,8 @@ data Options = Options
   , sudoPassFile :: Maybe Text  -- ^ Optional path to file containing sudo password
   , verbose :: Bool  -- ^ If True, print each command before running it
   , interactive :: Bool  -- ^ If True, prompt user before each command
+  , configPath :: FilePath -- ^ Path to configuration file, needed if not in default location
+  , workstation :: Text -- ^ Workstation name, needed if multiple workstations available
   }
   deriving (Show)
 
@@ -66,9 +68,6 @@ data NixSubcommand
 
 data Command
   = Bootstrap
-    { configPath :: FilePath
-    , workstation :: Text
-    }
   | Nix NixSubcommand
   | Status
     { configFile :: Maybe FilePath

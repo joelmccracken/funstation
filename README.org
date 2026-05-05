@@ -70,13 +70,13 @@ properties:
 *** running
 on your system, run the bootstrap:
 #+begin_src sh
-wshs bootstrap config.yaml $YOUR_SYSTEM_NAME
+wshs --config config.yaml --workstation $YOUR_SYSTEM_NAME bootstrap
 #+end_src
 * build, test, run
 ** from within a nix develop session
 run with
 #+begin_src sh
-  cabal build && cabal run -- wshs bootstrap ./config.yaml glamdring
+  cabal build && cabal run -- wshs --config ./config.yaml --workstation glamdring bootstrap
 #+end_src
 
 run main test suite with

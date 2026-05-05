@@ -44,13 +44,7 @@ getProp (HomebrewBundle p) = IsProp p
 getProp (BitwardenSecrets p) = IsProp p
 
 bootstrapParser :: Parser Command
-bootstrapParser = Bootstrap
-  <$> strArgument
-      ( metavar "CONFIG"
-     <> help "Path to the configuration YAML file" )
-  <*> strArgument
-      ( metavar "WORKSTATION"
-     <> help "Name of the current workstation. Usable by properties." )
+bootstrapParser = pure Bootstrap
 
 statusParser :: Parser Command
 statusParser = Status
@@ -70,7 +64,7 @@ nixSubcommandParser = subparser
 commandParser :: Parser Command
 commandParser = subparser
   ( App.command "bootstrap"
-    ( info (bootstrapParser <**> helper)
+    ( info (pure Bootstrap <**> helper)
       ( progDesc "Bootstrap a new workstation" )
     )
  <> App.command "nix"
@@ -104,6 +98,16 @@ optionsParser = Options
       ( long "interactive"
      <> short 'i'
      <> help "Prompt before each command; implies --verbose"
+      )
+  <*> strOption
+      ( long "config"
+     <> metavar "CONFIG_FILE"
+     <> help "Path to the configuration YAML file"
+      )
+  <*> strOption
+      ( long "workstation"
+     <> metavar "WORKSTATION"
+     <> help "Name of the current workstation. Usable by properties."
       )
 
 parseOptions :: IO Options
@@ -158,7 +162,7 @@ main = do
     else pure Nothing
 
   case opts.command of
-    Bootstrap cfgPath ws -> doBootstrap opts cfgPath ws
+    Bootstrap -> doBootstrap opts opts.configPath opts.workstation
     Nix NixRestart -> doNixRestart opts
     Status mCfg -> doStatus opts mCfg
 
