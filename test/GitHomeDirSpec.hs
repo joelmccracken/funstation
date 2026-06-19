@@ -50,19 +50,28 @@ setupRemote remoteDir =
     git ["-C", stagingDir, "commit", "-m", "initial"]
     git ["-C", stagingDir, "push", "origin", "main"]
 
--- | Bracket that sets up a bare remote, a fakeHome, and a gitDir path
--- (not pre-created, so the fixer will properly initialise it).
-withGitHomeTest :: (FilePath -> FilePath -> FilePath -> IO ()) -> IO ()
-withGitHomeTest fn =
-  withSystemTempDirectory "wshs-test" $ \rootDir -> do
-    let remoteDir = rootDir </> "remote"
-        gitDir    = rootDir </> "gitdir"   -- intentionally not created yet
-        fakeHome  = rootDir </> "home"
+-- | Created ONCE for the whole spec (via aroundAll). Builds the bare remote
+-- and populates it. The remote is only ever read from by checker/fixer, so it
+-- is safe to share across all examples.
+withRemote :: (FilePath -> IO ()) -> IO ()
+withRemote action =
+  withSystemTempDirectory "wshs-remote" $ \remoteRoot -> do
+    let remoteDir = remoteRoot </> "remote"
     createDirectoryIfMissing True remoteDir
-    createDirectoryIfMissing True fakeHome
     git ["init", "--bare", remoteDir]
     setupRemote remoteDir
-    fn remoteDir gitDir fakeHome
+    action remoteDir
+
+-- | Created PER TEST (via aroundWith). Provides a fresh gitDir (not pre-created,
+-- so the fixer will properly initialise it) and a fresh fakeHome, paired with
+-- the shared remoteDir.
+withPerTestDirs :: ActionWith (FilePath, FilePath, FilePath) -> ActionWith FilePath
+withPerTestDirs inner remoteDir =
+  withSystemTempDirectory "wshs-test" $ \rootDir -> do
+    let gitDir   = rootDir </> "gitdir"   -- intentionally not created yet
+        fakeHome = rootDir </> "home"
+    createDirectoryIfMissing True fakeHome
+    inner (remoteDir, gitDir, fakeHome)
 
 -- | Build a property pointing at the given dirs.
 mkProp :: FilePath -> FilePath -> FilePath -> Maybe Text -> GitHomeDirP
@@ -75,19 +84,22 @@ mkProp remoteDir gitDir fakeHome afterChange = GitHomeDirP
   }
 
 spec :: Spec
-spec = describe "GitHomeDirP" $ do
+spec =
+  aroundAll withRemote $
+  aroundWith withPerTestDirs $
+  describe "GitHomeDirP" $ do
 
   -- ── Checker ──────────────────────────────────────────────────────────────
 
   describe "checker" $ do
 
-    it "returns False when git dir is missing" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "returns False when git dir is missing" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       -- gitDir path was never created, so checker should return False
       result <- runWS $ checker p
       result `shouldBe` False
 
-    it "returns False when remote URL is wrong" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "returns False when remote URL is wrong" $ \(remoteDir, gitDir, fakeHome) -> do
       -- Run fixer to set up a valid repo, then check with wrong URL
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
@@ -95,7 +107,7 @@ spec = describe "GitHomeDirP" $ do
       result <- runWS $ checker wrongP
       result `shouldBe` False
 
-    it "returns False when tracked files are absent from homeDir" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "returns False when tracked files are absent from homeDir" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       -- Only init + fetch, don't checkout
       git ["init", "--bare", gitDir]
@@ -104,7 +116,7 @@ spec = describe "GitHomeDirP" $ do
       result <- runWS $ checker p
       result `shouldBe` False
 
-    it "returns True when fully set up" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "returns True when fully set up" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       result <- runWS $ checker p
@@ -114,7 +126,7 @@ spec = describe "GitHomeDirP" $ do
 
   describe "fixer" $ do
 
-    it "copies root-level files into homeDir" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "copies root-level files into homeDir" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       exists <- doesPathExist (fakeHome </> "bashrc")
@@ -122,7 +134,7 @@ spec = describe "GitHomeDirP" $ do
       content <- readFile (fakeHome </> "bashrc")
       content `shouldBe` "# bashrc\n"
 
-    it "copies nested files, creating missing subdirs" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "copies nested files, creating missing subdirs" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       -- Neither config/ nor config/foo/ exist in fakeHome
       runWS $ fixer p
@@ -131,7 +143,7 @@ spec = describe "GitHomeDirP" $ do
       content <- readFile (fakeHome </> "config" </> "foo" </> "bar.conf")
       content `shouldBe` "# bar\n"
 
-    it "copies nested file when parent dir already exists" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "copies nested file when parent dir already exists" $ \(remoteDir, gitDir, fakeHome) -> do
       -- Pre-create config/foo/ with an unrelated file
       createDirectoryIfMissing True (fakeHome </> "config" </> "foo")
       writeFile (fakeHome </> "config" </> "foo" </> "unrelated") "unrelated\n"
@@ -143,7 +155,7 @@ spec = describe "GitHomeDirP" $ do
       unrelated <- readFile (fakeHome </> "config" </> "foo" </> "unrelated")
       unrelated `shouldBe` "unrelated\n"
 
-    it "leaves existing conflicting files alone" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "leaves existing conflicting files alone" $ \(remoteDir, gitDir, fakeHome) -> do
       -- Put a local version of bashrc in fakeHome before fixer runs
       writeFile (fakeHome </> "bashrc") "local-version\n"
       let p = mkProp remoteDir gitDir fakeHome Nothing
@@ -151,7 +163,7 @@ spec = describe "GitHomeDirP" $ do
       content <- readFile (fakeHome </> "bashrc")
       content `shouldBe` "local-version\n"
 
-    it "runs runAfterChange script when changes are made" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "runs runAfterChange script when changes are made" $ \(remoteDir, gitDir, fakeHome) -> do
       withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         -- Write a script that touches the sentinel file
@@ -164,7 +176,7 @@ spec = describe "GitHomeDirP" $ do
         exists <- doesPathExist sentinelFile
         exists `shouldBe` True
 
-    it "does not run runAfterChange when nothing changed" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "does not run runAfterChange when nothing changed" $ \(remoteDir, gitDir, fakeHome) -> do
       withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         let sf = sentinelDir </> "after.sh"
@@ -179,7 +191,7 @@ spec = describe "GitHomeDirP" $ do
         exists <- doesPathExist sentinelFile
         exists `shouldBe` False
 
-    it "git status works from homeDir when gitDir is relative '.git'" $ withGitHomeTest $ \remoteDir _gitDir fakeHome -> do
+    it "git status works from homeDir when gitDir is relative '.git'" $ \(remoteDir, _gitDir, fakeHome) -> do
       let p = mkProp remoteDir ".git" fakeHome Nothing
       runWS $ fixer p
       output <- withCurrentDirectory fakeHome $
@@ -192,7 +204,7 @@ spec = describe "GitHomeDirP" $ do
             ]
       output `shouldBe` expectedStatus
 
-    it "is idempotent: second fixer run leaves files unchanged" $ withGitHomeTest $ \remoteDir gitDir fakeHome -> do
+    it "is idempotent: second fixer run leaves files unchanged" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       content1 <- readFile (fakeHome </> "bashrc")
