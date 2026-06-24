@@ -3,7 +3,7 @@ configRepoUrl: "https://github.com/joelmccracken/dotfiles"
 configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
 configRepoBranch: "master"
 workstations:
-  - workstationName: "aeglos"
+  - workstationName: "glamdring"
 properties:
   - type: GitHomeDir
     params:
