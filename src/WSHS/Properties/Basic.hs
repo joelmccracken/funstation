@@ -7,22 +7,12 @@
 module WSHS.Properties.Basic where
 
 import WSHS.Types
-import WSHS.Commands
 import WSHS.Properties.Git
-import Shh (exe)
-import Data.Text (Text)
-import Data.Text.Encoding qualified as T
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
 data BasicSetupP = BasicSetupP
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
-
-data WSConfigDirP = WSConfigDirP
-  { configDir        :: Text
-  , configRepoUrl    :: Text
-  , configRepoBranch :: Text
-  } deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 instance Prop BasicSetupP where
   desc _ = "basic setup"
@@ -30,18 +20,3 @@ instance Prop BasicSetupP where
   checker _ = return True -- dummy prop, wrapper for dependencies
   fixer _ = return () -- all action in dependencies
   dependencies _ = return [(IsProp HasGitP)]
-
-instance Prop WSConfigDirP where
-  desc _ = "wshs configuration directory"
-  attrs _ = mempty
-  checker p = do
-    expandedDir <- expandPath p.configDir
-    dirExists expandedDir
-  fixer p = do
-    expandedDir <- expandPath p.configDir
-    args' <- mkWSCmd ["git", "clone", "--branch", p.configRepoBranch, p.configRepoUrl, expandedDir]
-    result <- cmd $ exe $ T.encodeUtf8 <$> args'
-    case result of
-      Right _ -> putStrLn' $ "Cloned repository to " <> p.configDir
-      Left err -> putStrLn' $ "Failed to clone repository: " <> tshow err
-  dependencies _ = return [IsProp HasGitP]

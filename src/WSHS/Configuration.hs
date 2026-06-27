@@ -5,6 +5,7 @@
 module WSHS.Configuration where
 
 import WSHS.Properties.GitHomeDir  (GitHomeDirP)
+import WSHS.Properties.GitClone    (GitCloneP)
 import WSHS.Properties.Dotfiles    (DotfilesP)
 import WSHS.Properties.Nix         (NixDaemonP)
 import WSHS.Properties.HomeManager (HomeManagerP)
@@ -12,10 +13,10 @@ import WSHS.Properties.MacOS       (HomebrewBundleP)
 import WSHS.Properties.BitwardenSecrets (BitwardenSecretsP)
 import Data.Aeson.Types hiding (Parser, Options)
 import GHC.Generics (Generic)
-import Data.Text (Text)
 
 data Property
   = GitHomeDir      GitHomeDirP
+  | GitClone        GitCloneP
   | Dotfiles        DotfilesP
   | NixDaemon       NixDaemonP
   | HomeManager     HomeManagerP
@@ -40,9 +41,5 @@ instance FromJSON Property where
                                                 }
 
 data Configuration = Configuration
-  { configDir        :: Text
-  , configRepoUrl    :: Text
-  , configRepoOrigin :: Text
-  , configRepoBranch :: Text
-  , properties       :: [Property]
+  { properties :: [Property]
   } deriving (Generic, Show, FromJSON)

@@ -36,6 +36,7 @@ import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 import Data.Either (isRight)
 import qualified SudoSpec
 import qualified GitHomeDirSpec
+import qualified GitCloneSpec
 import Util
 
 -- | Run a WS action with a minimal configuration
@@ -894,3 +895,6 @@ main = hspec $ do
 
   describe "GitHomeDirP" $
     GitHomeDirSpec.spec
+
+  describe "GitCloneP" $
+    GitCloneSpec.spec

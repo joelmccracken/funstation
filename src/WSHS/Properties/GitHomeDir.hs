@@ -50,6 +50,12 @@ gitLsTree gitDir treeish = do
   result <- cmd ((exe $ T.encodeUtf8 <$> wsCommand)  |> captureTrim )
   pure $ fmap (filter (not . T.null) . T.lines . TL.toStrict . TL.decodeUtf8) result
 
+
+-- | resolveGitDir
+-- If gitDir path is absolute, use the exact path.
+-- Otherwise, treate the gitDir as if it were relative to the home dir
+-- example: `gitDir "/home/user" ".git-dir"    -->   "/home/user/.git-dir`
+-- example: `gitDir "/home/anywhere" "/tmp/git-dir"    -->  "/tmp/git-dir"
 resolveGitDir :: Text -> Text -> Text
 resolveGitDir homeDir gitDir
   | "/" `T.isPrefixOf` gitDir = gitDir
@@ -70,6 +76,7 @@ instance Prop GitHomeDirP where
     [ ("gitDir",    p.gitDir)
     , ("remoteUrl", p.remoteUrl)
     , ("branch",    p.branch)
+    , ("homeDir",   tshow p.homeDir)
     ]
 
   checker p = do

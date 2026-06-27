@@ -37,6 +37,7 @@ import System.Exit (exitFailure, exitSuccess)
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
+getProp (GitClone p) = IsProp p
 getProp (Dotfiles p) = IsProp p
 getProp (NixDaemon p) = IsProp p
 getProp (HomeManager p) = IsProp p
@@ -176,7 +177,6 @@ main = do
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
         ensureProperty (IsProp BasicSetupP)
-        ensureProperty (IsProp $ configDirProp cfg)
         forM_ (getProp <$> cfg.properties) ensureProperty
     result <-
       evalStateT
@@ -189,13 +189,6 @@ main = do
 
   wsState = WSState { props = mempty }
   settings opts = Settings { opts = opts, sudoCmd = "sudo" }
-
-  configDirProp cfg =
-    WSConfigDirP
-    { configDir = cfg.configDir
-    , configRepoUrl = cfg.configRepoUrl
-    , configRepoBranch = cfg.configRepoBranch
-    }
 
   doNixRestart opts = do
     result <-
