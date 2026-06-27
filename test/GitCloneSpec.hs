@@ -100,27 +100,23 @@ spec =
     it "returns False when the path is missing" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath Nothing
       -- clonePath was never created, so checker should return False
-      result <- runWS $ checker p
-      result `shouldBe` False
+      shouldBeM False $ runWS $ checker p
 
     it "returns False when the path exists but is not a git repo" $ \(remoteDir, clonePath) -> do
       createDirectoryIfMissing True clonePath
       let p = mkProp remoteDir clonePath Nothing
-      result <- runWS $ checker p
-      result `shouldBe` False
+      shouldBeM False $ runWS $ checker p
 
     it "returns False when remote URL does not match" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
       let wrongP = p { repoUrl = "file:///nonexistent" }
-      result <- runWS $ checker wrongP
-      result `shouldBe` False
+      shouldBeM False $ runWS $ checker wrongP
 
     it "returns True when cloned with a matching remote" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
-      result <- runWS $ checker p
-      result `shouldBe` True
+      shouldBeM True $ runWS $ checker p
 
   -- ── Fixer ─────────────────────────────────────────────────────────────────
 
@@ -129,36 +125,28 @@ spec =
     it "clones root-level files into the path" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
-      exists <- doesPathExist (clonePath </> "bashrc")
-      exists `shouldBe` True
-      content <- readFile (clonePath </> "bashrc")
-      content `shouldBe` "# bashrc\n"
+      shouldBeM True $ doesPathExist (clonePath </> "bashrc")
+      shouldBeM "# bashrc\n" $ readFile (clonePath </> "bashrc")
 
     it "clones nested files" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
-      exists <- doesPathExist (clonePath </> "config" </> "foo" </> "bar.conf")
-      exists `shouldBe` True
-      content <- readFile (clonePath </> "config" </> "foo" </> "bar.conf")
-      content `shouldBe` "# bar\n"
+      shouldBeM True $ doesPathExist (clonePath </> "config" </> "foo" </> "bar.conf")
+      shouldBeM "# bar\n" $ readFile (clonePath </> "config" </> "foo" </> "bar.conf")
 
     it "checks out the default branch when no branch is given" $ \(remoteDir, clonePath) -> do
       -- The default branch ("main") does not contain feature.txt.
       let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
-      featureExists <- doesPathExist (clonePath </> "feature.txt")
-      featureExists `shouldBe` False
+      shouldBeM False $ doesPathExist (clonePath </> "feature.txt")
 
     it "checks out the requested branch when one is given" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath (Just "feature")
       runWS $ fixer p
-      exists <- doesPathExist (clonePath </> "feature.txt")
-      exists `shouldBe` True
-      content <- readFile (clonePath </> "feature.txt")
-      content `shouldBe` "# feature\n"
+      shouldBeM True $ doesPathExist (clonePath </> "feature.txt")
+      shouldBeM "# feature\n" $ readFile (clonePath </> "feature.txt")
 
     it "produces a repo that the checker accepts" $ \(remoteDir, clonePath) -> do
       let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
-      result <- runWS $ checker p
-      result `shouldBe` True
+      shouldBeM True $ runWS $ checker p

@@ -12,6 +12,8 @@ import System.Posix.Files (setFileMode)
 import Shh.Internal (exe, captureTrim, (|>))
 import Control.Exception (bracket_)
 
+import Util (shouldBeM)
+
 -- | Temporarily set a file's mode, restoring the original after the action.
 -- Ensures cleanup can proceed even if the action throws.
 withFileMode :: FilePath -> Int -> IO a -> IO a
@@ -29,61 +31,51 @@ spec = do
     it "returns False for a user-owned readable file" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "readable.txt"
       writeFile f "content"
-      result <- needsSudoRead (T.pack f)
-      result `shouldBe` False
+      shouldBeM False $ needsSudoRead (T.pack f)
 
     it "returns False for a non-existent path" $ withTempDir $ \tmpDir -> do
-      result <- needsSudoRead (T.pack (tmpDir </> "nonexistent"))
-      result `shouldBe` False
+      shouldBeM False $ needsSudoRead (T.pack (tmpDir </> "nonexistent"))
 
     it "returns True for a file with no read permission (chmod 000)" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "unreadable.txt"
       writeFile f "content"
-      withFileMode f 0o000 $ do
-        result <- needsSudoRead (T.pack f)
-        result `shouldBe` True
+      withFileMode f 0o000 $
+        shouldBeM True $ needsSudoRead (T.pack f)
 
   describe "needsSudo" $ do
     it "returns False for a user-owned writable file" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "writable.txt"
       writeFile f "content"
-      result <- needsSudo (T.pack f)
-      result `shouldBe` False
+      shouldBeM False $ needsSudo (T.pack f)
 
     it "returns False for a non-existent path in a user-owned directory" $ withTempDir $ \tmpDir -> do
-      result <- needsSudo (T.pack (tmpDir </> "nonexistent"))
-      result `shouldBe` False
+      shouldBeM False $ needsSudo (T.pack (tmpDir </> "nonexistent"))
 
     it "returns True for a read-only file (chmod 444)" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "readonly.txt"
       writeFile f "content"
-      withFileMode f 0o444 $ do
-        result <- needsSudo (T.pack f)
-        result `shouldBe` True
+      withFileMode f 0o444 $
+        shouldBeM True $ needsSudo (T.pack f)
 
   describe "needsSudoFor" $ do
     it "ReadAccess dispatches to needsSudoRead" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "file.txt"
       writeFile f "content"
-      viaDispatch <- needsSudoFor ReadAccess (T.pack f)
-      direct      <- needsSudoRead (T.pack f)
-      viaDispatch `shouldBe` direct
+      direct <- needsSudoRead (T.pack f)
+      shouldBeM direct $ needsSudoFor ReadAccess (T.pack f)
 
     it "WriteAccess dispatches to needsSudo" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "file.txt"
       writeFile f "content"
-      viaDispatch <- needsSudoFor WriteAccess (T.pack f)
-      direct      <- needsSudo (T.pack f)
-      viaDispatch `shouldBe` direct
+      direct <- needsSudo (T.pack f)
+      shouldBeM direct $ needsSudoFor WriteAccess (T.pack f)
 
     it "ReadAccess and WriteAccess can differ: read-only file needs write sudo but not read sudo" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "readonly.txt"
       writeFile f "content"
       withFileMode f 0o444 $ do
-        needsReadSudo  <- needsSudoFor ReadAccess  (T.pack f)
-        needsWriteSudo <- needsSudoFor WriteAccess (T.pack f)
-        needsReadSudo  `shouldBe` False  -- 444 is readable by owner
-        needsWriteSudo `shouldBe` True   -- 444 is not writable
+        shouldBeM False $ needsSudoFor ReadAccess  (T.pack f)  -- 444 is readable by owner
+        shouldBeM True  $ needsSudoFor WriteAccess (T.pack f)  -- 444 is not writable
 
   describe "mkPrivCmd (permission-driven branch selection)" $ do
     it "takes the env branch for a user-owned writable directory" $ withTempDir $ \tmpDir -> do
@@ -91,8 +83,7 @@ spec = do
       args <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir)
                 ["bash", "-c", T.pack $ "echo env-branch > " <> outFile]
       _ <- exe (T.unpack <$> args)
-      content <- readFile outFile
-      content `shouldBe` "env-branch\n"
+      shouldBeM "env-branch\n" $ readFile outFile
 
     it "takes the sudo branch for a read-only file (injected as env for safety)" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "readonly.txt"
@@ -102,15 +93,13 @@ spec = do
         args <- mkPrivCmd "env" WriteAccess (T.pack f)
                   ["bash", "-c", T.pack $ "echo sudo-branch > " <> outFile]
         _ <- exe (T.unpack <$> args)
-        content <- readFile outFile
-        content `shouldBe` "sudo-branch\n"
+        shouldBeM "sudo-branch\n" $ readFile outFile
 
     it "ReadAccess: takes env branch for readable file, result is captured" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "src.txt"
       writeFile f "hello"
       args <- mkPrivCmd "sudo" ReadAccess (T.pack f) ["cat", T.pack f]
-      result <- exe (T.unpack <$> args) |> captureTrim
-      result `shouldBe` "hello"
+      shouldBeM "hello" $ exe (T.unpack <$> args) |> captureTrim
 
     it "ReadAccess: takes sudo branch for unreadable file (injected as env)" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "secret.txt"
@@ -120,5 +109,4 @@ spec = do
         args <- mkPrivCmd "env" ReadAccess (T.pack f)
                   ["bash", "-c", T.pack $ "echo read-sudo-branch > " <> outFile]
         _ <- exe (T.unpack <$> args)
-        content <- readFile outFile
-        content `shouldBe` "read-sudo-branch\n"
+        shouldBeM "read-sudo-branch\n" $ readFile outFile

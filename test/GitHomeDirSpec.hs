@@ -96,16 +96,14 @@ spec =
     it "returns False when git dir is missing" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       -- gitDir path was never created, so checker should return False
-      result <- runWS $ checker p
-      result `shouldBe` False
+      shouldBeM False $ runWS $ checker p
 
     it "returns False when remote URL is wrong" $ \(remoteDir, gitDir, fakeHome) -> do
       -- Run fixer to set up a valid repo, then check with wrong URL
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       let wrongP = p { remoteUrl = "file:///nonexistent" }
-      result <- runWS $ checker wrongP
-      result `shouldBe` False
+      shouldBeM False $ runWS $ checker wrongP
 
     it "returns False when tracked files are absent from homeDir" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
@@ -113,14 +111,12 @@ spec =
       git ["init", "--bare", gitDir]
       git ["--git-dir", gitDir, "remote", "add", "origin", remoteDir]
       git ["--git-dir", gitDir, "fetch", "origin"]
-      result <- runWS $ checker p
-      result `shouldBe` False
+      shouldBeM False $ runWS $ checker p
 
     it "returns True when fully set up" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
-      result <- runWS $ checker p
-      result `shouldBe` True
+      shouldBeM True $ runWS $ checker p
 
   -- ── Fixer ─────────────────────────────────────────────────────────────────
 
@@ -129,19 +125,15 @@ spec =
     it "copies root-level files into homeDir" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
-      exists <- doesPathExist (fakeHome </> "bashrc")
-      exists `shouldBe` True
-      content <- readFile (fakeHome </> "bashrc")
-      content `shouldBe` "# bashrc\n"
+      shouldBeM True $ doesPathExist (fakeHome </> "bashrc")
+      shouldBeM "# bashrc\n" $ readFile (fakeHome </> "bashrc")
 
     it "copies nested files, creating missing subdirs" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
       -- Neither config/ nor config/foo/ exist in fakeHome
       runWS $ fixer p
-      exists <- doesPathExist (fakeHome </> "config" </> "foo" </> "bar.conf")
-      exists `shouldBe` True
-      content <- readFile (fakeHome </> "config" </> "foo" </> "bar.conf")
-      content `shouldBe` "# bar\n"
+      shouldBeM True $ doesPathExist (fakeHome </> "config" </> "foo" </> "bar.conf")
+      shouldBeM "# bar\n" $ readFile (fakeHome </> "config" </> "foo" </> "bar.conf")
 
     it "copies nested file when parent dir already exists" $ \(remoteDir, gitDir, fakeHome) -> do
       -- Pre-create config/foo/ with an unrelated file
@@ -149,19 +141,16 @@ spec =
       writeFile (fakeHome </> "config" </> "foo" </> "unrelated") "unrelated\n"
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
-      exists <- doesPathExist (fakeHome </> "config" </> "foo" </> "bar.conf")
-      exists `shouldBe` True
+      shouldBeM True $ doesPathExist (fakeHome </> "config" </> "foo" </> "bar.conf")
       -- Unrelated file must be untouched
-      unrelated <- readFile (fakeHome </> "config" </> "foo" </> "unrelated")
-      unrelated `shouldBe` "unrelated\n"
+      shouldBeM "unrelated\n" $ readFile (fakeHome </> "config" </> "foo" </> "unrelated")
 
     it "leaves existing conflicting files alone" $ \(remoteDir, gitDir, fakeHome) -> do
       -- Put a local version of bashrc in fakeHome before fixer runs
       writeFile (fakeHome </> "bashrc") "local-version\n"
       let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
-      content <- readFile (fakeHome </> "bashrc")
-      content `shouldBe` "local-version\n"
+      shouldBeM "local-version\n" $ readFile (fakeHome </> "bashrc")
 
     it "runs runAfterChange script when changes are made" $ \(remoteDir, gitDir, fakeHome) -> do
       withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
@@ -173,8 +162,7 @@ spec =
           return sf
         let p = (mkProp remoteDir gitDir fakeHome (Just (T.pack scriptFile)))
         runWS $ fixer p
-        exists <- doesPathExist sentinelFile
-        exists `shouldBe` True
+        shouldBeM True $ doesPathExist sentinelFile
 
     it "does not run runAfterChange when nothing changed" $ \(remoteDir, gitDir, fakeHome) -> do
       withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
@@ -188,21 +176,19 @@ spec =
         removeFile sentinelFile
         -- Second run: checker would pass, nothing to do
         runWS $ fixer p
-        exists <- doesPathExist sentinelFile
-        exists `shouldBe` False
+        shouldBeM False $ doesPathExist sentinelFile
 
     it "git status works from homeDir when gitDir is relative '.git'" $ \(remoteDir, _gitDir, fakeHome) -> do
       let p = mkProp remoteDir ".git" fakeHome Nothing
       runWS $ fixer p
-      output <- withCurrentDirectory fakeHome $
-        exe (["git", "-c", "color.ui=never", "status"] :: [String]) |> captureTrim
       let expectedStatus = mconcat
             [ "On branch main\n"
             , "Your branch is up to date with 'origin/main'.\n"
             , "\n"
             , "nothing to commit, working tree clean"
             ]
-      output `shouldBe` expectedStatus
+      shouldBeM expectedStatus $ withCurrentDirectory fakeHome $
+        exe (["git", "-c", "color.ui=never", "status"] :: [String]) |> captureTrim
 
     it "is idempotent: second fixer run leaves files unchanged" $ \(remoteDir, gitDir, fakeHome) -> do
       let p = mkProp remoteDir gitDir fakeHome Nothing
@@ -211,5 +197,4 @@ spec =
       runWS $ fixer p
       content2 <- readFile (fakeHome </> "bashrc")
       content1 `shouldBe` content2
-      result <- runWS $ checker p
-      result `shouldBe` True
+      shouldBeM True $ runWS $ checker p
