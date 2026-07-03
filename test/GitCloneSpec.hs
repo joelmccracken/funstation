@@ -73,11 +73,12 @@ withRemote action =
 -- | Created PER TEST (via aroundWith). Provides a fresh clone destination path
 -- (intentionally not created, so the fixer's @git clone@ creates it), paired
 -- with the shared remoteDir.
-withPerTestDirs :: ActionWith (FilePath, FilePath) -> ActionWith FilePath
+withPerTestDirs :: ActionWith (FilePath, FilePath, GitCloneP) -> ActionWith FilePath
 withPerTestDirs inner remoteDir =
   withSystemTempDirectory "wshs-test" $ \rootDir -> do
     let clonePath = rootDir </> "clone"  -- intentionally not created yet
-    inner (remoteDir, clonePath)
+    let p = mkProp remoteDir clonePath Nothing
+    inner (remoteDir, clonePath, p)
 
 -- | Build a property pointing at the given dirs.
 mkProp :: FilePath -> FilePath -> Maybe Text -> GitCloneP
@@ -97,24 +98,20 @@ spec =
 
   describe "checker" $ do
 
-    it "returns False when the path is missing" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath Nothing
+    it "returns False when the path is missing" $ \(_remoteDir, _clonePath, p) -> do
       -- clonePath was never created, so checker should return False
       shouldBeM False $ runWS $ checker p
 
-    it "returns False when the path exists but is not a git repo" $ \(remoteDir, clonePath) -> do
+    it "returns False when the path exists but is not a git repo" $ \(_remoteDir, clonePath, p) -> do
       createDirectoryIfMissing True clonePath
-      let p = mkProp remoteDir clonePath Nothing
       shouldBeM False $ runWS $ checker p
 
-    it "returns False when remote URL does not match" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath Nothing
+    it "returns False when remote URL does not match" $ \(_remoteDir, _clonePath, p) -> do
       runWS $ fixer p
       let wrongP = p { repoUrl = "file:///nonexistent" }
       shouldBeM False $ runWS $ checker wrongP
 
-    it "returns True when cloned with a matching remote" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath Nothing
+    it "returns True when cloned with a matching remote" $ \(_remoteDir, _clonePath, p) -> do
       runWS $ fixer p
       shouldBeM True $ runWS $ checker p
 
@@ -122,31 +119,27 @@ spec =
 
   describe "fixer" $ do
 
-    it "clones root-level files into the path" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath Nothing
+    it "clones root-level files into the path" $ \(_remoteDir, clonePath, p) -> do
       runWS $ fixer p
       shouldBeM True $ doesPathExist (clonePath </> "bashrc")
       shouldBeM "# bashrc\n" $ readFile (clonePath </> "bashrc")
 
-    it "clones nested files" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath Nothing
+    it "clones nested files" $ \(_remoteDir, clonePath, p) -> do
       runWS $ fixer p
       shouldBeM True $ doesPathExist (clonePath </> "config" </> "foo" </> "bar.conf")
       shouldBeM "# bar\n" $ readFile (clonePath </> "config" </> "foo" </> "bar.conf")
 
-    it "checks out the default branch when no branch is given" $ \(remoteDir, clonePath) -> do
+    it "checks out the default branch when no branch is given" $ \(_remoteDir, clonePath, p) -> do
       -- The default branch ("main") does not contain feature.txt.
-      let p = mkProp remoteDir clonePath Nothing
       runWS $ fixer p
       shouldBeM False $ doesPathExist (clonePath </> "feature.txt")
 
-    it "checks out the requested branch when one is given" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath (Just "feature")
-      runWS $ fixer p
+    it "checks out the requested branch when one is given" $ \(_remoteDir, clonePath, p) -> do
+      let featureP = p { branch = Just "feature" }
+      runWS $ fixer featureP
       shouldBeM True $ doesPathExist (clonePath </> "feature.txt")
       shouldBeM "# feature\n" $ readFile (clonePath </> "feature.txt")
 
-    it "produces a repo that the checker accepts" $ \(remoteDir, clonePath) -> do
-      let p = mkProp remoteDir clonePath Nothing
+    it "produces a repo that the checker accepts" $ \(_remoteDir, _clonePath, p) -> do
       runWS $ fixer p
       shouldBeM True $ runWS $ checker p
