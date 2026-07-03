@@ -65,13 +65,14 @@ withRemote action =
 -- | Created PER TEST (via aroundWith). Provides a fresh gitDir (not pre-created,
 -- so the fixer will properly initialise it) and a fresh fakeHome, paired with
 -- the shared remoteDir.
-withPerTestDirs :: ActionWith (FilePath, FilePath, FilePath) -> ActionWith FilePath
+withPerTestDirs :: ActionWith (FilePath, FilePath, FilePath, GitHomeDirP) -> ActionWith FilePath
 withPerTestDirs inner remoteDir =
   withSystemTempDirectory "wshs-test" $ \rootDir -> do
     let gitDir   = rootDir </> "gitdir"   -- intentionally not created yet
         fakeHome = rootDir </> "home"
     createDirectoryIfMissing True fakeHome
-    inner (remoteDir, gitDir, fakeHome)
+    let p = mkProp remoteDir gitDir fakeHome Nothing
+    inner (remoteDir, gitDir, fakeHome, p)
 
 -- | Build a property pointing at the given dirs.
 mkProp :: FilePath -> FilePath -> FilePath -> Maybe Text -> GitHomeDirP
@@ -93,28 +94,24 @@ spec =
 
   describe "checker" $ do
 
-    it "returns False when git dir is missing" $ \(remoteDir, gitDir, fakeHome) -> do
-      let p = mkProp remoteDir gitDir fakeHome Nothing
+    it "returns False when git dir is missing" $ \(remoteDir, gitDir, fakeHome, p) -> do
       -- gitDir path was never created, so checker should return False
       shouldBeM False $ runWS $ checker p
 
-    it "returns False when remote URL is wrong" $ \(remoteDir, gitDir, fakeHome) -> do
+    it "returns False when remote URL is wrong" $ \(remoteDir, gitDir, fakeHome, p) -> do
       -- Run fixer to set up a valid repo, then check with wrong URL
-      let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       let wrongP = p { remoteUrl = "file:///nonexistent" }
       shouldBeM False $ runWS $ checker wrongP
 
-    it "returns False when tracked files are absent from homeDir" $ \(remoteDir, gitDir, fakeHome) -> do
-      let p = mkProp remoteDir gitDir fakeHome Nothing
+    it "returns False when tracked files are absent from homeDir" $ \(remoteDir, gitDir, fakeHome, p) -> do
       -- Only init + fetch, don't checkout
       git ["init", "--bare", gitDir]
       git ["--git-dir", gitDir, "remote", "add", "origin", remoteDir]
       git ["--git-dir", gitDir, "fetch", "origin"]
       shouldBeM False $ runWS $ checker p
 
-    it "returns True when fully set up" $ \(remoteDir, gitDir, fakeHome) -> do
-      let p = mkProp remoteDir gitDir fakeHome Nothing
+    it "returns True when fully set up" $ \(remoteDir, gitDir, fakeHome, p) -> do
       runWS $ fixer p
       shouldBeM True $ runWS $ checker p
 
@@ -122,37 +119,33 @@ spec =
 
   describe "fixer" $ do
 
-    it "copies root-level files into homeDir" $ \(remoteDir, gitDir, fakeHome) -> do
-      let p = mkProp remoteDir gitDir fakeHome Nothing
+    it "copies root-level files into homeDir" $ \(remoteDir, gitDir, fakeHome, p) -> do
       runWS $ fixer p
       shouldBeM True $ doesPathExist (fakeHome </> "bashrc")
       shouldBeM "# bashrc\n" $ readFile (fakeHome </> "bashrc")
 
-    it "copies nested files, creating missing subdirs" $ \(remoteDir, gitDir, fakeHome) -> do
-      let p = mkProp remoteDir gitDir fakeHome Nothing
+    it "copies nested files, creating missing subdirs" $ \(remoteDir, gitDir, fakeHome, p) -> do
       -- Neither config/ nor config/foo/ exist in fakeHome
       runWS $ fixer p
       shouldBeM True $ doesPathExist (fakeHome </> "config" </> "foo" </> "bar.conf")
       shouldBeM "# bar\n" $ readFile (fakeHome </> "config" </> "foo" </> "bar.conf")
 
-    it "copies nested file when parent dir already exists" $ \(remoteDir, gitDir, fakeHome) -> do
+    it "copies nested file when parent dir already exists" $ \(remoteDir, gitDir, fakeHome, p) -> do
       -- Pre-create config/foo/ with an unrelated file
       createDirectoryIfMissing True (fakeHome </> "config" </> "foo")
       writeFile (fakeHome </> "config" </> "foo" </> "unrelated") "unrelated\n"
-      let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       shouldBeM True $ doesPathExist (fakeHome </> "config" </> "foo" </> "bar.conf")
       -- Unrelated file must be untouched
       shouldBeM "unrelated\n" $ readFile (fakeHome </> "config" </> "foo" </> "unrelated")
 
-    it "leaves existing conflicting files alone" $ \(remoteDir, gitDir, fakeHome) -> do
+    it "leaves existing conflicting files alone" $ \(remoteDir, gitDir, fakeHome, p) -> do
       -- Put a local version of bashrc in fakeHome before fixer runs
       writeFile (fakeHome </> "bashrc") "local-version\n"
-      let p = mkProp remoteDir gitDir fakeHome Nothing
       runWS $ fixer p
       shouldBeM "local-version\n" $ readFile (fakeHome </> "bashrc")
 
-    it "runs runAfterChange script when changes are made" $ \(remoteDir, gitDir, fakeHome) -> do
+    it "runs runAfterChange script when changes are made" $ \(remoteDir, gitDir, fakeHome, p) -> do
       withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         -- Write a script that touches the sentinel file
@@ -160,27 +153,27 @@ spec =
           let sf = sentinelDir </> "after.sh"
           writeFile sf $ "touch " <> sentinelFile <> "\n"
           return sf
-        let p = (mkProp remoteDir gitDir fakeHome (Just (T.pack scriptFile)))
-        runWS $ fixer p
+        let p' = p { runAfterChange = Just (T.pack scriptFile) }
+        runWS $ fixer p'
         shouldBeM True $ doesPathExist sentinelFile
 
-    it "does not run runAfterChange when nothing changed" $ \(remoteDir, gitDir, fakeHome) -> do
+    it "does not run runAfterChange when nothing changed" $ \(remoteDir, gitDir, fakeHome, p) -> do
       withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         let sf = sentinelDir </> "after.sh"
         writeFile sf $ "touch " <> sentinelFile <> "\n"
-        let p = mkProp remoteDir gitDir fakeHome (Just (T.pack sf))
+        let p' = p { runAfterChange = Just (T.pack sf) }
         -- First run: sets everything up, sentinel created
-        runWS $ fixer p
+        runWS $ fixer p'
         -- Reset sentinel
         removeFile sentinelFile
         -- Second run: checker would pass, nothing to do
-        runWS $ fixer p
+        runWS $ fixer p'
         shouldBeM False $ doesPathExist sentinelFile
 
-    it "git status works from homeDir when gitDir is relative '.git'" $ \(remoteDir, _gitDir, fakeHome) -> do
-      let p = mkProp remoteDir ".git" fakeHome Nothing
-      runWS $ fixer p
+    it "git status works from homeDir when gitDir is relative '.git'" $ \(remoteDir, _gitDir, fakeHome, p) -> do
+      let p' = p { gitDir = ".git" }
+      runWS $ fixer p'
       let expectedStatus = mconcat
             [ "On branch main\n"
             , "Your branch is up to date with 'origin/main'.\n"
@@ -190,8 +183,7 @@ spec =
       shouldBeM expectedStatus $ withCurrentDirectory fakeHome $
         exe (["git", "-c", "color.ui=never", "status"] :: [String]) |> captureTrim
 
-    it "is idempotent: second fixer run leaves files unchanged" $ \(remoteDir, gitDir, fakeHome) -> do
-      let p = mkProp remoteDir gitDir fakeHome Nothing
+    it "is idempotent: second fixer run leaves files unchanged" $ \(remoteDir, gitDir, fakeHome, p) -> do
       runWS $ fixer p
       content1 <- readFile (fakeHome </> "bashrc")
       runWS $ fixer p
