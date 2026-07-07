@@ -65,6 +65,7 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  WSHS, WSHS.Sudo, WSHS.Types, WSHS.Commands,
+                      WSHS.Proc,
                       WSHS.Configuration,
                       WSHS.Properties.Dotfiles, WSHS.Properties.Git, WSHS.Properties.GitHomeDir, WSHS.Properties.GitClone, WSHS.Properties.MacOS,
                       WSHS.Properties.Debian, WSHS.Properties.Basic, WSHS.Properties.Nix,

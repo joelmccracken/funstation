@@ -9,6 +9,7 @@ module WSHS.Properties.HomeManager where
 import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import Shh (exe, captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -77,10 +78,10 @@ instance Prop HomeManagerP where
     ws <- getWorkstation
     flakeOut <- liftIO $ mkFlakeOut ws
     expandedDir <- expandPath p.dir
-    let runCmd = "cd " <> expandedDir
+    let runCmd' = "cd " <> expandedDir
               <> " && nix -v -L --show-trace run "
               <> flakeOut
-    args' <- mkWSCmd ["bash", "-c", runCmd]
+    args' <- mkWSCmd ["bash", "-c", runCmd']
     result <- cmd $ exe $ T.encodeUtf8 <$> args'
     either
       (\err-> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err)

@@ -8,6 +8,7 @@ module WSHS (module WSHS, module WSHS.Types, module WSHS.Configuration, module W
 import WSHS.Sudo
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import WSHS.Configuration
 import WSHS.Properties.Dotfiles
 import WSHS.Properties.Git ()

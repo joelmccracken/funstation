@@ -14,17 +14,16 @@ import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
 import Data.Maybe (isJust)
 import System.FilePath (takeDirectory)
-import Control.Monad (void, unless, when)
+import Control.Monad (void, unless)
 import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, asks)
-import System.IO (hFlush, stdout)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Shh (exe, devNull, (&>), captureTrim, (|>), Failure, Proc, tryFailure)
-import GHC.Stack (withFrozenCallStack)
+import Shh (exe, devNull, (&>), captureTrim, (|>))
 import Control.Monad.Except (MonadError, throwError)
 import WSHS.Types
 import WSHS.Sudo
+import WSHS.Proc
 
 detectOS :: (MonadIO m, MonadError WSError m) => m OS
 detectOS = do
@@ -87,34 +86,6 @@ getOwnerGroup path = do
       case words $ TL.unpack $ TL.decodeUtf8 bytes of
         (_:_:owner:group:_) -> pure $ T.pack owner <> ":" <> T.pack group
         _ -> pure "root:root"
-
--- | Run a privilege-escalating command in the WS monad.
--- Reads the sudo command from Settings; uses AccessMode to choose the
--- permission check (read or write).
-privCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => AccessMode -> Text -> [Text] -> m (Either Failure ())
-privCmd mode pth args = do
-  sc <- asks (.sudoCmd)
-
-  c  <- liftIO $ mkPrivCmd sc mode pth args
-  c' <- mkWSCmd c
-  cmd $ exe $ T.encodeUtf8 <$> c'
-
-mkWSCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [Text] -> m [Text]
-mkWSCmd c = do
-  inter <- asks (.opts.interactive)
-  v     <- asks (.opts.verbose)
-  when (v || inter) $ liftIO $ TIO.putStrLn $ "running: " <> T.intercalate " " c
-  when inter $ do
-    response <-
-      liftIO $ do
-        TIO.putStr "Continue? [c/q]: "
-        hFlush stdout
-        liftIO getLine
-    case response of
-      "q" -> throwError WSAborted
-      _   -> pure ()
-  pure c
-
 
 -- | Move a file to a timestamped backup, using sudo only if needed.
 mvToBackupAuto :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m Text
@@ -210,9 +181,6 @@ fileContentsFix path content = do
 
 tshow :: Show s => s -> Text
 tshow = T.pack . show
-
-cmd :: MonadIO m => Proc a -> m (Either Failure a)
-cmd c = liftIO $ tryFailure $ withFrozenCallStack c
 
 putStrLn' :: MonadIO m => Text -> m ()
 putStrLn' t = liftIO $ putStrLn $ T.unpack t

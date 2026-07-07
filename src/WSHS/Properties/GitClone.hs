@@ -10,6 +10,7 @@ module WSHS.Properties.GitClone (GitCloneP(..)) where
 import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import WSHS.Properties.Git (HasGitP(..))
 import WSHS.Properties.GitHomeDir (gitDirRemoteUrl)
 import Shh (exe)

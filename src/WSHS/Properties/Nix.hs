@@ -9,6 +9,7 @@ module WSHS.Properties.Nix where
 import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import Shh (exe)
 import Data.Text (Text)
 import Data.Text qualified as T

@@ -11,6 +11,7 @@ import Shh (exe, devNull, (&>))
 import Data.Text.Encoding qualified as T
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
+import WSHS.Proc
 
 data AptUpdateP = AptUpdateP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)

@@ -12,6 +12,7 @@ import Control.Monad.Reader (MonadReader)
 import Control.Monad.IO.Class (MonadIO)
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import Shh (exe, devNull, (&>), captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T

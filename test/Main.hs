@@ -38,6 +38,7 @@ import qualified SudoSpec
 import qualified GitHomeDirSpec
 import qualified GitCloneSpec
 import Util
+import WSHS.Proc
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state

@@ -9,6 +9,7 @@ module WSHS.Properties.BitwardenSecrets where
 
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import Shh (exe, captureTrim, (|>), Failure)
 import Data.Aeson (FromJSON, ToJSON, eitherDecode)
 import GHC.Generics (Generic)

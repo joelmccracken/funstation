@@ -10,6 +10,7 @@ module WSHS.Properties.Git where
 import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
+import WSHS.Proc
 import WSHS.Properties.MacOS
 import WSHS.Properties.Debian
 import Shh (exe, devNull, (&>))
