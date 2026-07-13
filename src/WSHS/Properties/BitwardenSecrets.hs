@@ -10,12 +10,11 @@ module WSHS.Properties.BitwardenSecrets where
 import WSHS.Types
 import WSHS.Commands
 import WSHS.Proc
-import Shh (exe, captureTrim, (|>), Failure)
+import Shh (captureTrim, (|>), Failure)
 import Data.Aeson (FromJSON, ToJSON, eitherDecode)
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import qualified Data.ByteString.Lazy as LBS
@@ -54,8 +53,7 @@ data BwItem = BwItem
 bwCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [Text] -> m (Either Failure LBS.ByteString)
 bwCmd args = do
   let shellCmd = "NODE_OPTIONS='--no-deprecation' bw " <> T.unwords args
-  args' <- mkWSCmd ["bash", "-c", shellCmd]
-  cmd $ exe (T.encodeUtf8 <$> args') |> captureTrim
+  runCmd ["bash", "-c", shellCmd] (|> captureTrim)
 
 -- | Read the last-sync POSIX timestamp from state file; returns 0 if absent.
 getLastSyncTs :: FilePath -> IO Integer
@@ -140,8 +138,7 @@ instance Prop BitwardenSecretsP where
           [] -> do
             putStrLn' "  Creating bww_files folder in Bitwarden vault..."
             let script = "NODE_OPTIONS='--no-deprecation' printf '%s' '{\"name\":\"bww_files\"}' | bw encode | bw create folder"
-            createArgs <- mkWSCmd ["bash", "-c", script]
-            createResult <- cmd $ exe (T.encodeUtf8 <$> createArgs) |> captureTrim
+            createResult <- runCmd ["bash", "-c", script] (|> captureTrim)
             case createResult of
               Left err -> do { liftIO (unsetEnv "BW_SESSION"); throwError $ WSFailure $ "bw create folder failed: " <> tshow err }
               Right bs2 -> case eitherDecode bs2 :: Either String BwFolder of
@@ -168,8 +165,7 @@ instance Prop BitwardenSecretsP where
           putStrLn' $ "  Writing " <> expandedPath <> "..."
           ensureParentDir expandedPath
           void $ fileContentsFix expandedPath content
-          chmodArgs <- mkWSCmd ["chmod", "0600", expandedPath]
-          void $ cmd $ exe $ T.encodeUtf8 <$> chmodArgs
+          void $ runCmd ["chmod", "0600", expandedPath] Prelude.id
 
     -- 7. Save sync timestamp
     liftIO $ saveLastSyncTs home

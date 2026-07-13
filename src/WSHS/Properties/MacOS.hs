@@ -34,18 +34,15 @@ instance Prop XCodeCLIToolsP where
       putStrLn' "Installing Xcode CLI Tools..."
 
       -- Create marker file that triggers CLT in softwareupdate list
-      touchArgs <- mkWSCmd ["touch", "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"]
-      void $ cmd $ exe $ T.encodeUtf8 <$> touchArgs
+      void $ runCmd ["touch", "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"] id
 
       -- Find and install the CLT package
       let findAndInstall = "softwareupdate -i \"$(softwareupdate -l 2>&1 | grep -o 'Command Line Tools for Xcode-[0-9.]*' | head -1)\""
-      installArgs <- mkWSCmd ["bash", "-c", findAndInstall]
-      result <- cmd $ exe $ T.encodeUtf8 <$> installArgs
+      result <- runCmd ["bash", "-c", findAndInstall] id
 
       -- Clean up marker
       -- TODO bracket to clean up
-      rmArgs <- mkWSCmd ["rm", "-f", "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"]
-      void $ cmd $ exe $ T.encodeUtf8 <$> rmArgs
+      void $ runCmd ["rm", "-f", "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"] id
 
       case result of
         Left err -> throwError $ WSFailure $ "Failed to install Xcode CLI tools: " <> tshow err
@@ -58,8 +55,7 @@ instance Prop HomebrewP where
   attrs _ = mempty
   checker _ = hasCmd' "brew"
   fixer _ = do
-    args' <- mkWSCmd ["bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"]
-    result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
+    result <- runCmd ["bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"] (&> devNull)
     case result of
       Right _ -> putStrLn' "Homebrew installed successfully"
       Left err -> putStrLn' $ "Failed to install homebrew: " <> tshow err
@@ -78,8 +74,7 @@ instance Prop HomebrewBundleP where
       then return False
       else isRight <$> cmd (exe "brew" "bundle" "check" "--no-upgrade" ("--file=" <> T.unpack p.brewfile) &> devNull)
   fixer p = do
-    args' <- mkWSCmd ["brew", "bundle", "install", "--file=" <> p.brewfile]
-    result <- cmd $ exe $ T.encodeUtf8 <$> args'
+    result <- runCmd ["brew", "bundle", "install", "--file=" <> p.brewfile] id
     case result of
       Right _ -> putStrLn' "Homebrew bundle installed."
       Left err -> throwError $ WSFailure $ "brew bundle install failed: " <> tshow err

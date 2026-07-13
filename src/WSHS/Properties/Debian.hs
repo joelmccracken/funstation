@@ -7,8 +7,7 @@ module WSHS.Properties.Debian where
 
 import WSHS.Types
 import WSHS.Commands
-import Shh (exe, devNull, (&>))
-import Data.Text.Encoding qualified as T
+import Shh (devNull, (&>))
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 import WSHS.Proc
@@ -21,8 +20,7 @@ instance Prop AptUpdateP where
   attrs _ = mempty
   checker _ = return False  -- Always run update to be safe
   fixer _ = do
-    args' <- mkWSCmd ["sudo", "apt-get", "update"]
-    result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
+    result <- runCmd ["sudo", "apt-get", "update"] (&> devNull)
     case result of
       Right _ -> putStrLn' "apt package sets updated successfully"
       Left err -> putStrLn' $ "Failed to update apt: " <> tshow err

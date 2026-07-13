@@ -61,8 +61,8 @@ fileExists path = isRight <$> cmd (exe "test" "-e" (T.unpack path))
 -- | Create a directory (and any missing parents).
 mkDir :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
 mkDir path = do
-  args' <- mkWSCmd ["mkdir", "-p", path]
-  void $ cmd $ exe $ T.encodeUtf8 <$> args'
+  void $ runCmd ["mkdir", "-p", path] id
+
 
 -- | Ensure a parent directory exists, using sudo only if needed.
 ensureParentDir :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
@@ -195,8 +195,7 @@ mvToBackup :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text 
 mvToBackup path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  args' <- mkWSCmd ["mv", path, backupPath]
-  result <- cmd $ exe $ T.encodeUtf8 <$> args'
+  result <- runCmd ["mv", path, backupPath] (&> devNull)
   case result of
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
     Left err -> throwError $ WSFailure $ "Failed to move file: " <> tshow err
@@ -208,13 +207,10 @@ restartNixDaemon = do
   case os of
     MacOS -> do
       liftIO $ putStrLn "Restarting Nix daemon (macOS)..."
-      unloadArgs <- mkWSCmd ["sudo", "launchctl", "unload", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"]
-      void $ cmd $ exe $ T.encodeUtf8 <$> unloadArgs
-      loadArgs <- mkWSCmd ["sudo", "launchctl", "load", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"]
-      void $ cmd $ exe $ T.encodeUtf8 <$> loadArgs
+      void $ runCmd ["sudo", "launchctl", "unload", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"] id
+      void $ runCmd ["sudo", "launchctl", "load", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"] id
     Debian -> do
       liftIO $ putStrLn "Restarting Nix daemon (Debian)..."
-      restartArgs <- mkWSCmd ["sudo", "systemctl", "restart", "nix-daemon.service"]
-      void $ cmd $ exe $ T.encodeUtf8 <$> restartArgs
+      void $ runCmd ["sudo", "systemctl", "restart", "nix-daemon.service"] id
     Unknown -> throwError $ WSFailure "Cannot restart nix daemon: unknown OS"
   liftIO $ threadDelay 5000000

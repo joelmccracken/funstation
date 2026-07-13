@@ -81,8 +81,7 @@ instance Prop HomeManagerP where
     let runCmd' = "cd " <> expandedDir
               <> " && nix -v -L --show-trace run "
               <> flakeOut
-    args' <- mkWSCmd ["bash", "-c", runCmd']
-    result <- cmd $ exe $ T.encodeUtf8 <$> args'
+    result <- runCmd ["bash", "-c", runCmd'] id
     either
       (\err-> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err)
       (const $ putStrLn' "Home Manager configuration activated.")

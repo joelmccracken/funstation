@@ -13,8 +13,7 @@ import WSHS.Commands
 import WSHS.Proc
 import WSHS.Properties.MacOS
 import WSHS.Properties.Debian
-import Shh (exe, devNull, (&>))
-import Data.Text.Encoding qualified as T
+import Shh (devNull, (&>))
 import Data.Bool (bool)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
@@ -34,8 +33,7 @@ instance Prop GitMacOSP where
   attrs _ = mempty
   checker _ = hasCmd' "git"
   fixer _ = do
-    args' <- mkWSCmd ["brew", "install", "git"]
-    result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
+    result <- runCmd ["brew", "install", "git"] (&> devNull)
     case result of
       Right _ -> putStrLn' "Git installed successfully"
       Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -46,8 +44,7 @@ instance Prop GitDebianP where
   attrs _ = mempty
   checker _ = hasCmd' "git"
   fixer _ = do
-    args' <- mkWSCmd ["sudo", "apt-get", "install", "-y", "git"]
-    result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
+    result <- runCmd ["sudo", "apt-get", "install", "-y", "git"] (&> devNull)
     case result of
       Right _ -> putStrLn' "Git installed successfully"
       Left err -> putStrLn' $ "Failed to install git: " <> tshow err
@@ -69,14 +66,12 @@ instance Prop HasGitP where
     case os of
       Unknown -> throwError $ WSFailure "error: Unknown OS, unable to install git"
       MacOS -> do
-        args' <- mkWSCmd ["brew", "install", "git"]
-        result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
+        result <- runCmd ["brew", "install", "git"] (&> devNull)
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
       Debian -> do
-        args' <- mkWSCmd ["sudo", "apt-get", "install", "-y", "git"]
-        result <- cmd $ exe (T.encodeUtf8 <$> args') &> devNull
+        result <- runCmd ["sudo", "apt-get", "install", "-y", "git"] (&> devNull)
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err

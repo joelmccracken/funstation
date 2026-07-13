@@ -38,8 +38,7 @@ gitDirRemoteUrl ::
 gitDirRemoteUrl gitDir name = do
   let theCmd =
         ["git", "--git-dir", gitDir, "remote", "get-url", name]
-  args' <- mkWSCmd theCmd
-  result <- cmd ( (exe $ T.encodeUtf8 <$> args') |> captureTrim )
+  result <- runCmd theCmd (|> captureTrim)
   pure $ fmap (TL.toStrict . TL.decodeUtf8) result
 
 -- | List all tracked file paths under a treeish in a bare git dir.
@@ -47,8 +46,7 @@ gitLsTree :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -
 gitLsTree gitDir treeish = do
   let theCmd =
         ["git", "--git-dir", gitDir, "ls-tree", "-r", "--full-tree", "--name-only", treeish]
-  wsCommand <- mkWSCmd theCmd
-  result <- cmd ((exe $ T.encodeUtf8 <$> wsCommand)  |> captureTrim )
+  result <- runCmd theCmd (|> captureTrim)
   pure $ fmap (filter (not . T.null) . T.lines . TL.toStrict . TL.decodeUtf8) result
 
 
@@ -115,8 +113,7 @@ instance Prop GitHomeDirP where
 
     didInitializeGitDir <-
       if not gitDirExists then do
-        args' <- mkWSCmd ["git", "init", "--bare", expandedGitDir]
-        result <- cmd $ exe $ T.encodeUtf8 <$> args'
+        result <- runCmd ["git", "init", "--bare", expandedGitDir] id
         case result of
           Right _ -> do
             void $ cmd $ exe $ T.encodeUtf8 <$>
@@ -135,18 +132,15 @@ instance Prop GitHomeDirP where
         pure False -- already correct
       Right _ -> do
         -- TODO this branch needs to be tested
-        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "set-url", "origin", p.remoteUrl]
-        void $ cmd $ exe $ T.encodeUtf8 <$> args'
+        void $ runCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "set-url", "origin", p.remoteUrl] id
         pure True
       Left _ -> do
         -- TODO ensure this branch tested
-        args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "remote", "add", "origin", p.remoteUrl]
-        void $ cmd $ exe $ T.encodeUtf8 <$> args'
+        void $ runCmd ["git", "--git-dir", expandedGitDir, "remote", "add", "origin", p.remoteUrl] id
         pure True
 
     -- Step 3: fetch (always; errors out on failure)
-    fetchArgs <- mkWSCmd ["git", "--git-dir", expandedGitDir, "fetch", "origin"]
-    fetchResult <- cmd $ exe $ T.encodeUtf8 <$> fetchArgs
+    fetchResult <- runCmd ["git", "--git-dir", expandedGitDir, "fetch", "origin"] id
     case fetchResult of
       Left err -> throwError $ WSFailure $ "Failed to fetch from remote: " <> tshow err
       Right _  -> pure ()
@@ -155,8 +149,7 @@ instance Prop GitHomeDirP where
     let remoteBranch = "origin/" <> p.branch
     void $ cmd $ exe $ T.encodeUtf8 <$>
       ["git", "--git-dir", expandedGitDir, "branch", p.branch, remoteBranch]
-    args' <- mkWSCmd ["git", "--git-dir", expandedGitDir, "branch", "--set-upstream-to", remoteBranch, p.branch]
-    void $ cmd $ exe $ T.encodeUtf8 <$> args'
+    void $ runCmd ["git", "--git-dir", expandedGitDir, "branch", "--set-upstream-to", remoteBranch, p.branch] id
 
     -- Switch HEAD to the correct branch and reset index to match it
     void $ cmd $ exe $ T.encodeUtf8 <$>
@@ -179,12 +172,11 @@ instance Prop GitHomeDirP where
           exists <- fileExists destPath
           if exists then pure False else do
             putStrLn' $ "Checking out missing file: " <> f
-            coArgs <- mkWSCmd ["bash", "-c", T.intercalate " "
+            result <- runCmd ["bash", "-c", T.intercalate " "
                                 [ "cd ", expandedHomeDir, ";"
                                 , "git", "--git-dir", expandedGitDir
                                 , "--work-tree", expandedHomeDir
-                                , "checkout", "origin/" <> p.branch, "--", f]]
-            result <- cmd $ exe $ T.encodeUtf8 <$> coArgs
+                                , "checkout", "origin/" <> p.branch, "--", f]] id
             case result of
               Right _ -> pure True
               Left err -> do
@@ -196,8 +188,7 @@ instance Prop GitHomeDirP where
     when didChange  $ forM_ p.runAfterChange $ \script -> do
       expandedScript <- expandPath script
       putStrLn' $ "Running post-change script: " <> expandedScript
-      scriptArgs <- mkWSCmd ["bash", expandedScript]
-      result <- cmd $ exe $ T.encodeUtf8 <$> scriptArgs
+      result <- runCmd ["bash", expandedScript] id
       case result of
         Right _ -> pure ()
         Left err -> throwError $ WSFailure $ "Post-change script failed: " <> tshow err

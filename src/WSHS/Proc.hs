@@ -28,8 +28,7 @@ privCmd mode pth args = do
   sc <- asks (.sudoCmd)
 
   c  <- liftIO $ mkPrivCmd sc mode pth args
-  c' <- mkWSCmd c
-  cmd $ exe $ T.encodeUtf8 <$> c'
+  runCmd c id
 
 mkWSCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [Text] -> m [Text]
 mkWSCmd c = do

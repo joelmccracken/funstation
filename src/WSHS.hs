@@ -19,12 +19,10 @@ import WSHS.Properties.Basic
 import WSHS.Properties.Nix ()
 import WSHS.Properties.HomeManager ()
 import WSHS.Properties.BitwardenSecrets ()
-import Shh (exe)
 
 import Options.Applicative
 import Options.Applicative qualified as App
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as T
 import Data.Maybe (fromMaybe)
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
@@ -209,11 +207,10 @@ main = do
         expandedGitDir  <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
         let
           runGitStatus = do
-            args <- mkWSCmd [ "bash", "-c" , T.intercalate " "
-                                              [ "cd", expandedHomeDir, ";", "git", "--git-dir", expandedGitDir
-                                              , "status" ]
-                            ]
-            cmd $ exe (T.encodeUtf8 <$> args)
+            runCmd [ "bash", "-c" , T.intercalate " "
+                                      [ "cd", expandedHomeDir, ";", "git", "--git-dir", expandedGitDir
+                                      , "status" ]
+                   ] id
 
         result <- runExceptT $ runReaderT runGitStatus
           (Settings { opts = opts, sudoCmd = "sudo" })

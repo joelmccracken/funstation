@@ -67,8 +67,7 @@ instance Prop NixDaemonP where
         putStrLn' $ "Installing Nix " <> ver <> "..."
 
         let installCmd = "curl -L " <> installerUrl <> " | sh -s -- --daemon" <> yesFlag
-        args' <- mkWSCmd ["bash", "-c", installCmd]
-        result <- cmd $ exe $ T.encodeUtf8 <$> args'
+        result <- runCmd ["bash", "-c", installCmd] id
         case result of
           Left err -> throwError $ WSFailure $ "Nix installation failed: " <> tshow err
           Right _ -> pure ()

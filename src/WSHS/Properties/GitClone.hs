@@ -13,9 +13,7 @@ import WSHS.Commands
 import WSHS.Proc
 import WSHS.Properties.Git (HasGitP(..))
 import WSHS.Properties.GitHomeDir (gitDirRemoteUrl)
-import Shh (exe)
 import Data.Text (Text)
-import Data.Text.Encoding qualified as T
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
@@ -45,8 +43,7 @@ instance Prop GitCloneP where
   fixer p = do
     expandedPath <- expandPath p.path
     let branchArgs = maybe [] (\b -> ["--branch", b]) p.branch
-    args' <- mkWSCmd $ ["git", "clone"] ++ branchArgs ++ [p.repoUrl, expandedPath]
-    result <- cmd $ exe $ T.encodeUtf8 <$> args'
+    result <- runCmd (["git", "clone"] ++ branchArgs ++ [p.repoUrl, expandedPath]) id
     case result of
       Right _  -> putStrLn' $ "Cloned " <> p.repoUrl <> " to " <> p.path
       Left err -> throwError $ WSFailure $ "Failed to clone repository: " <> tshow err

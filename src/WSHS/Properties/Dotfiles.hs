@@ -132,8 +132,7 @@ applyDotfileFix f src dest diff = do
   case diff of
     DotfileBrokenSymlink -> do
       putStrLn' $ "Removing broken symlink: " <> dest
-      rmArgs <- mkWSCmd ["rm", dest]
-      void $ cmd $ exe $ T.encodeUtf8 <$> rmArgs
+      void $ runCmd ["rm", dest] id
     DotfileWrong -> do
       putStrLn' $ "Backing up existing file: " <> dest
       mvToBackup dest
@@ -143,12 +142,10 @@ applyDotfileFix f src dest diff = do
   case f.sort of
     Symlink -> do
       putStrLn' $ "Creating symlink: " <> dest <> " -> " <> src
-      lnArgs <- mkWSCmd ["ln", "-s", src, dest]
-      void $ cmd $ exe $ T.encodeUtf8 <$> lnArgs
+      void $ runCmd ["ln", "-s", src, dest] id
     Copy -> do
       putStrLn' $ "Copying: " <> src <> " -> " <> dest
-      cpArgs <- mkWSCmd ["cp", "-r", src, dest]
-      void $ cmd $ exe $ T.encodeUtf8 <$> cpArgs
+      void $ runCmd ["cp", "-r", src, dest] id
 
 instance Prop DotfilesP where
   desc _ = "dotfiles management"
