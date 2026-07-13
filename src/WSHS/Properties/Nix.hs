@@ -10,10 +10,8 @@ import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
 import WSHS.Proc
-import Shh (exe)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as T
 import Data.Maybe (fromMaybe)
 import Control.Monad (unless, when)
 -- import qualified Data.Map.Strict as Map

@@ -13,7 +13,6 @@ import WSHS.Proc
 import Shh (exe, captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as T
 import Data.Aeson (eitherDecode, FromJSON)
 import Control.Monad.Reader (MonadReader, ask)
 import Control.Monad.Except (MonadError)

@@ -16,7 +16,6 @@ import WSHS.Proc
 import Shh (exe, devNull, (&>), captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Bool (bool)
