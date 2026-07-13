@@ -15,7 +15,7 @@ import WSHS.Properties.HasGit ()
 import WSHS.Properties.GitHomeDir (resolveGitDir, GitHomeDirP(..))
 import WSHS.Properties.MacOS ()
 import WSHS.Properties.Debian ()
-import WSHS.Properties.Basic
+import WSHS.Properties.CoreDependencies
 import WSHS.Properties.Nix ()
 import WSHS.Properties.HomeManager ()
 import WSHS.Properties.BitwardenSecrets ()
@@ -175,7 +175,7 @@ main = do
       bootstrapAct = do
         putStrLn' $ "Workstation: " <> ws
         putStrLn' "\nEnsuring properties..."
-        ensureProperty (IsProp BasicSetupP)
+        ensureProperty (IsProp CoreDependenciesP)
         forM_ (getProp <$> cfg.properties) ensureProperty
     result <-
       evalStateT

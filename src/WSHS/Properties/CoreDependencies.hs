@@ -4,17 +4,17 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.Basic where
+module WSHS.Properties.CoreDependencies where
 
 import WSHS.Types
 import WSHS.Properties.HasGit
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
-data BasicSetupP = BasicSetupP
+data CoreDependenciesP = CoreDependenciesP
   deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
-instance Prop BasicSetupP where
+instance Prop CoreDependenciesP where
   desc _ = "basic setup"
   attrs _ = mempty
   checker _ = return True -- dummy prop, wrapper for dependencies

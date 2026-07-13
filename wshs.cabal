@@ -68,7 +68,7 @@ library
                       WSHS.Proc,
                       WSHS.Configuration,
                       WSHS.Properties.Dotfiles, WSHS.Properties.HasGit, WSHS.Properties.GitHomeDir, WSHS.Properties.GitClone, WSHS.Properties.MacOS,
-                      WSHS.Properties.Debian, WSHS.Properties.Basic, WSHS.Properties.Nix,
+                      WSHS.Properties.Debian, WSHS.Properties.CoreDependencies, WSHS.Properties.Nix,
                       WSHS.Properties.HomeManager, WSHS.Properties.BitwardenSecrets
 
     -- Modules included in this library but not exported.
