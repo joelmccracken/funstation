@@ -5,51 +5,18 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module WSHS.Properties.Git where
+module WSHS.Properties.HasGit where
 
 import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
-import WSHS.Proc
 import WSHS.Properties.MacOS
 import WSHS.Properties.Debian
-import Shh (devNull, (&>))
-import Data.Bool (bool)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
-
 data HasGitP = HasGitP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
-
-data GitMacOSP = GitMacOSP
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
-
-data GitDebianP = GitDebianP
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
-
-instance Prop GitMacOSP where
-  desc _ = "git (macOS via Homebrew)"
-  attrs _ = mempty
-  checker _ = hasCmd' "git"
-  fixer _ = do
-    result <- runCmd ["brew", "install", "git"] (&> devNull)
-    case result of
-      Right _ -> putStrLn' "Git installed successfully"
-      Left err -> putStrLn' $ "Failed to install git: " <> tshow err
-  dependencies _ = return [(IsProp HomebrewP)]
-
-instance Prop GitDebianP where
-  desc _ = "git (Debian via apt)"
-  attrs _ = mempty
-  checker _ = hasCmd' "git"
-  fixer _ = do
-    result <- runCmd ["sudo", "apt-get", "install", "-y", "git"] (&> devNull)
-    case result of
-      Right _ -> putStrLn' "Git installed successfully"
-      Left err -> putStrLn' $ "Failed to install git: " <> tshow err
-  dependencies _ = do
-    hasCmd' "git" >>= bool (return [(IsProp AptUpdateP)]) (return [])
 
 instance Prop HasGitP where
   desc _ = "has command `git` installed"
@@ -66,12 +33,12 @@ instance Prop HasGitP where
     case os of
       Unknown -> throwError $ WSFailure "error: Unknown OS, unable to install git"
       MacOS -> do
-        result <- runCmd ["brew", "install", "git"] (&> devNull)
+        result <- brewInstall "git"
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
       Debian -> do
-        result <- runCmd ["sudo", "apt-get", "install", "-y", "git"] (&> devNull)
+        result <- aptInstall "git"
         case result of
           Right _ -> putStrLn' "Git installed successfully"
           Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err

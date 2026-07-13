@@ -11,7 +11,7 @@ import WSHS.Commands
 import WSHS.Proc
 import WSHS.Configuration
 import WSHS.Properties.Dotfiles
-import WSHS.Properties.Git ()
+import WSHS.Properties.HasGit ()
 import WSHS.Properties.GitHomeDir (resolveGitDir, GitHomeDirP(..))
 import WSHS.Properties.MacOS ()
 import WSHS.Properties.Debian ()

@@ -7,7 +7,7 @@
 module WSHS.Properties.Basic where
 
 import WSHS.Types
-import WSHS.Properties.Git
+import WSHS.Properties.HasGit
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 

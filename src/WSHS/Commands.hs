@@ -19,7 +19,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Shh (exe, devNull, (&>), captureTrim, (|>))
+import Shh (exe, devNull, (&>), captureTrim, (|>), Failure)
 import Control.Monad.Except (MonadError, throwError)
 import WSHS.Types
 import WSHS.Sudo
@@ -199,6 +199,14 @@ mvToBackup path = do
   case result of
     Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
     Left err -> throwError $ WSFailure $ "Failed to move file: " <> tshow err
+
+-- | Install a package via Homebrew (@brew install \<package\>@).
+brewInstall :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m (Either Failure ())
+brewInstall package = runCmd ["brew", "install", package] (&> devNull)
+
+-- | Install a package via apt (@sudo apt-get install -y \<package\>@).
+aptInstall :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m (Either Failure ())
+aptInstall package = runCmd ["sudo", "apt-get", "install", "-y", package] (&> devNull)
 
 -- | Restart the Nix daemon (OS-aware)
 restartNixDaemon :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m ()

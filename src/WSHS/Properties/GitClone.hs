@@ -11,7 +11,7 @@ import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
 import WSHS.Proc
-import WSHS.Properties.Git (HasGitP(..))
+import WSHS.Properties.HasGit (HasGitP(..))
 import WSHS.Properties.GitHomeDir (gitDirRemoteUrl)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
