@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.Debian where
+module WSHS.Properties.AptUpdate where
 
 import WSHS.Types
 import WSHS.Commands
