@@ -67,7 +67,8 @@ library
     exposed-modules:  WSHS, WSHS.Sudo, WSHS.Types, WSHS.Commands,
                       WSHS.Proc,
                       WSHS.Configuration,
-                      WSHS.Properties.Dotfiles, WSHS.Properties.HasGit, WSHS.Properties.GitHomeDir, WSHS.Properties.GitClone, WSHS.Properties.MacOS,
+                      WSHS.Properties.Dotfiles, WSHS.Properties.HasGit, WSHS.Properties.GitHomeDir, WSHS.Properties.GitClone,
+                      WSHS.Properties.XCodeCLITools, WSHS.Properties.Homebrew, WSHS.Properties.HomebrewBundle,
                       WSHS.Properties.AptUpdate, WSHS.Properties.CoreDependencies, WSHS.Properties.Nix,
                       WSHS.Properties.HomeManager, WSHS.Properties.BitwardenSecrets
 

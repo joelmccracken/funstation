@@ -10,7 +10,7 @@ module WSHS.Properties.HasGit where
 import Control.Monad.Except (throwError)
 import WSHS.Types
 import WSHS.Commands
-import WSHS.Properties.MacOS
+import WSHS.Properties.Homebrew
 import WSHS.Properties.AptUpdate
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
