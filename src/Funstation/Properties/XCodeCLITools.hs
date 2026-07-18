@@ -4,12 +4,12 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.XCodeCLITools where
+module Funstation.Properties.XCodeCLITools where
 
 import Control.Monad.Except (throwError)
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
 import Shh (exe, devNull, (&>))
 import Data.Either (isRight)
 import Control.Monad (void)

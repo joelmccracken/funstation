@@ -17,11 +17,11 @@ jobs:
       - name: Build
         run: nix build --accept-flake-config
       - name: Copy binary
-        run: cp result/bin/wshs wshs-x86_64-darwin
+        run: cp result/bin/fun funstation-x86_64-darwin
       - uses: actions/upload-artifact@v4
         with:
-          name: wshs-x86_64-darwin
-          path: wshs-x86_64-darwin
+          name: funstation-x86_64-darwin
+          path: funstation-x86_64-darwin
 
   build-aarch64:
     name: Build (aarch64-darwin)
@@ -32,11 +32,11 @@ jobs:
       - name: Build
         run: nix build --accept-flake-config
       - name: Copy binary
-        run: cp result/bin/wshs wshs-aarch64-darwin
+        run: cp result/bin/fun funstation-aarch64-darwin
       - uses: actions/upload-artifact@v4
         with:
-          name: wshs-aarch64-darwin
-          path: wshs-aarch64-darwin
+          name: funstation-aarch64-darwin
+          path: funstation-aarch64-darwin
 
   release:
     name: Publish Release
@@ -45,15 +45,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wshs-x86_64-darwin
+          name: funstation-x86_64-darwin
       - uses: actions/download-artifact@v4
         with:
-          name: wshs-aarch64-darwin
+          name: funstation-aarch64-darwin
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest build (master)
           prerelease: true
           files: |
-            wshs-x86_64-darwin
-            wshs-aarch64-darwin
+            funstation-x86_64-darwin
+            funstation-aarch64-darwin

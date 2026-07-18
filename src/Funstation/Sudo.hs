@@ -2,7 +2,7 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 
-module WSHS.Sudo (module WSHS.Sudo) where
+module Funstation.Sudo (module Funstation.Sudo) where
 
 import Data.Text (Text)
 import Data.Text qualified as T

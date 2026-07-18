@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module WSHS.Proc where
+module Funstation.Proc where
 
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -16,8 +16,8 @@ import System.IO (hFlush, stdout)
 import Shh (exe, devNull, (&>), Failure, Proc, tryFailure)
 import GHC.Stack (withFrozenCallStack)
 import Control.Monad.Except (MonadError, throwError)
-import WSHS.Types
-import WSHS.Sudo
+import Funstation.Types
+import Funstation.Sudo
 
 
 -- | Run a privilege-escalating command in the WS monad.

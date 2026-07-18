@@ -4,12 +4,12 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.Nix where
+module Funstation.Properties.Nix where
 
 import Control.Monad.Except (throwError)
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Maybe (fromMaybe)

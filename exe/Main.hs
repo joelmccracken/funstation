@@ -1,5 +1,5 @@
-import qualified WSHS
+import qualified Funstation
 
 main :: IO ()
 main = do
-  WSHS.main
+  Funstation.main

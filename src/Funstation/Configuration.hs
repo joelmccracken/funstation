@@ -2,15 +2,15 @@
 {-# LANGUAGE DeriveAnyClass    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module WSHS.Configuration where
+module Funstation.Configuration where
 
-import WSHS.Properties.GitHomeDir  (GitHomeDirP)
-import WSHS.Properties.GitClone    (GitCloneP)
-import WSHS.Properties.Dotfiles    (DotfilesP)
-import WSHS.Properties.Nix         (NixDaemonP)
-import WSHS.Properties.HomeManager (HomeManagerP)
-import WSHS.Properties.HomebrewBundle (HomebrewBundleP)
-import WSHS.Properties.BitwardenSecrets (BitwardenSecretsP)
+import Funstation.Properties.GitHomeDir  (GitHomeDirP)
+import Funstation.Properties.GitClone    (GitCloneP)
+import Funstation.Properties.Dotfiles    (DotfilesP)
+import Funstation.Properties.Nix         (NixDaemonP)
+import Funstation.Properties.HomeManager (HomeManagerP)
+import Funstation.Properties.HomebrewBundle (HomebrewBundleP)
+import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP)
 import Data.Aeson.Types hiding (Parser, Options)
 import GHC.Generics (Generic)
 

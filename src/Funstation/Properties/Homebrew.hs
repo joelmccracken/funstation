@@ -4,12 +4,12 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.Homebrew where
+module Funstation.Properties.Homebrew where
 
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
-import WSHS.Properties.XCodeCLITools
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
+import Funstation.Properties.XCodeCLITools
 import Shh (devNull, (&>))
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)

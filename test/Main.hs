@@ -20,7 +20,7 @@ import Data.Text.Lazy.Encoding qualified as TL
 
 -- import Data.Text.Encoding (encodeUtf8)
 import Data.Yaml (decodeThrow)
-import WSHS hiding (main, failLeft)
+import Funstation hiding (main, failLeft)
 import Control.Monad (forM_)
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
@@ -38,7 +38,7 @@ import qualified SudoSpec
 import qualified GitHomeDirSpec
 import qualified GitCloneSpec
 import Util
-import WSHS.Proc
+import Funstation.Proc
 
 -- | Run a WS action with a minimal configuration
 -- TODO this really should take the cfg opts settings and initial state
@@ -72,7 +72,7 @@ createTestDir path = do
 
 configText :: Text
 configText = [r|
-configDir: "~/.wshs"
+configDir: "~/.funstation"
 configRepoUrl: "https://github.com/joelmccracken/dotfiles"
 configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
 configRepoBranch: "main"
@@ -116,7 +116,7 @@ main = hspec $ do
   describe "DotfileConfig" $ do
     let
       withTempSrcAndDest fn =
-        withSystemTempDirectory "wshs-test" $ \tmpDir -> do
+        withSystemTempDirectory "funstation-test" $ \tmpDir -> do
           let srcDir = tmpDir </> "src"
           let destDir = tmpDir </> "dest"
           createDirectoryIfMissing True srcDir
@@ -725,7 +725,7 @@ main = hspec $ do
 
   describe "fileContentsCheck" $ do
     let withTempDir fn =
-          withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+          withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
 
     it "returns True when file exists with matching contents" $ withTempDir $ \tmpDir -> do
       let testFile = tmpDir </> "testfile"
@@ -766,7 +766,7 @@ main = hspec $ do
 
   describe "fileContentsFix" $ do
     let withTempDir fn =
-          withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+          withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
 
     it "returns Nothing when file already has correct contents" $ withTempDir $ \tmpDir -> do
       let testFile = tmpDir </> "testfile"
@@ -827,7 +827,7 @@ main = hspec $ do
       updatedContent `shouldBe` newContent
 
   describe "mkPrivCmd" $ do
-    let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+    let withTempDir fn = withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
 
     it "uses env prefix when path is user-owned (no sudo needed)" $ withTempDir $ \tmpDir -> do
       -- Path is user-owned → needsSudo returns False → exe ("env" : args)
@@ -860,7 +860,7 @@ main = hspec $ do
       result `shouldSatisfy` isRight
 
   describe "privCmd" $ do
-    let withTempDir fn = withSystemTempDirectory "wshs-test" $ \tmpDir -> fn tmpDir
+    let withTempDir fn = withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
 
     it "runs WriteAccess command on user-owned path without sudo" $ withTempDir $ \tmpDir -> do
       let outFile = tmpDir </> "out.txt"

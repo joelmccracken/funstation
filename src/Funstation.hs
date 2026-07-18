@@ -3,24 +3,24 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module WSHS (module WSHS, module WSHS.Types, module WSHS.Configuration, module WSHS.Properties.Dotfiles, module WSHS.Sudo, module WSHS.Commands) where
+module Funstation (module Funstation, module Funstation.Types, module Funstation.Configuration, module Funstation.Properties.Dotfiles, module Funstation.Sudo, module Funstation.Commands) where
 
-import WSHS.Sudo
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
-import WSHS.Configuration
-import WSHS.Properties.Dotfiles
-import WSHS.Properties.HasGit ()
-import WSHS.Properties.GitHomeDir (resolveGitDir, GitHomeDirP(..))
-import WSHS.Properties.XCodeCLITools ()
-import WSHS.Properties.Homebrew ()
-import WSHS.Properties.HomebrewBundle ()
-import WSHS.Properties.AptUpdate ()
-import WSHS.Properties.CoreDependencies
-import WSHS.Properties.Nix ()
-import WSHS.Properties.HomeManager ()
-import WSHS.Properties.BitwardenSecrets ()
+import Funstation.Sudo
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
+import Funstation.Configuration
+import Funstation.Properties.Dotfiles
+import Funstation.Properties.HasGit ()
+import Funstation.Properties.GitHomeDir (resolveGitDir, GitHomeDirP(..))
+import Funstation.Properties.XCodeCLITools ()
+import Funstation.Properties.Homebrew ()
+import Funstation.Properties.HomebrewBundle ()
+import Funstation.Properties.AptUpdate ()
+import Funstation.Properties.CoreDependencies
+import Funstation.Properties.Nix ()
+import Funstation.Properties.HomeManager ()
+import Funstation.Properties.BitwardenSecrets ()
 
 import Options.Applicative
 import Options.Applicative qualified as App
@@ -53,7 +53,7 @@ statusParser = Status
   <$> optional (strOption
       ( long "config"
      <> metavar "FILE"
-     <> help "Path to the configuration YAML file (default: ~/.config/wshs/config.yaml)" ))
+     <> help "Path to the configuration YAML file (default: ~/.config/funstation/config.yaml)" ))
 
 nixSubcommandParser :: Parser NixSubcommand
 nixSubcommandParser = subparser
@@ -116,8 +116,8 @@ parseOptions :: IO Options
 parseOptions =
   execParser $ info (optionsParser <**> helper)
     ( fullDesc
-      <> progDesc "WSHS - Workstation Setup Helper System"
-      <> header "wshs - manage workstation configurations"
+      <> progDesc "funstation - a workstation configuration tool"
+      <> header "fun - manage workstation configurations"
     )
 
 ensureProperty
@@ -198,7 +198,7 @@ main = do
     failLeft result
 
   doStatus opts mCfg = do
-    let cfgPath = fromMaybe "~/.config/wshs/config.yaml" (fmap T.pack mCfg)
+    let cfgPath = fromMaybe "~/.config/funstation/config.yaml" (fmap T.pack mCfg)
     expandedCfgPath <- T.unpack <$> expandPath cfgPath
     cfg <- decodeFileThrow expandedCfgPath :: IO Configuration
     let gitHomeDirs = [ p | GitHomeDir p <- cfg.properties ]
@@ -222,7 +222,7 @@ failLeft :: MonadIO m => Either WSError a -> m a
 failLeft = either (liftIO . handleFail) pure
  where
   handleFail (WSFailure msg) = do
-    putStrLn $ "wshs: error: " <> T.unpack msg
+    putStrLn $ "fun: error: " <> T.unpack msg
     exitFailure
   handleFail WSAborted = do
     putStrLn "Run aborted."

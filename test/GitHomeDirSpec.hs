@@ -15,8 +15,8 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe, captureTrim, (|>))
 
-import WSHS.Types
-import WSHS.Properties.GitHomeDir (GitHomeDirP (..))
+import Funstation.Types
+import Funstation.Properties.GitHomeDir (GitHomeDirP (..))
 import Util
 
 -- | Run a WS action with a minimal configuration
@@ -36,7 +36,7 @@ git args = exe $ ("git" : args)
 --   - "config/foo/bar.conf" (nested)
 setupRemote :: FilePath -> IO ()
 setupRemote remoteDir =
-  withSystemTempDirectory "wshs-staging" $ \stagingDir -> do
+  withSystemTempDirectory "funstation-staging" $ \stagingDir -> do
     git ["-c", "init.defaultBranch=main", "init", stagingDir]
     git ["-C", stagingDir, "config", "user.email", "test@example.com"]
     git ["-C", stagingDir, "config", "user.name",  "Test User"]
@@ -55,7 +55,7 @@ setupRemote remoteDir =
 -- is safe to share across all examples.
 withRemote :: (FilePath -> IO ()) -> IO ()
 withRemote action =
-  withSystemTempDirectory "wshs-remote" $ \remoteRoot -> do
+  withSystemTempDirectory "funstation-remote" $ \remoteRoot -> do
     let remoteDir = remoteRoot </> "remote"
     createDirectoryIfMissing True remoteDir
     git ["init", "--bare", remoteDir]
@@ -67,7 +67,7 @@ withRemote action =
 -- the shared remoteDir.
 withPerTestDirs :: ActionWith (FilePath, FilePath, FilePath, GitHomeDirP) -> ActionWith FilePath
 withPerTestDirs inner remoteDir =
-  withSystemTempDirectory "wshs-test" $ \rootDir -> do
+  withSystemTempDirectory "funstation-test" $ \rootDir -> do
     let gitDir   = rootDir </> "gitdir"   -- intentionally not created yet
         fakeHome = rootDir </> "home"
     createDirectoryIfMissing True fakeHome
@@ -146,7 +146,7 @@ spec =
       shouldBeM "local-version\n" $ readFile (fakeHome </> "bashrc")
 
     it "runs runAfterChange script when changes are made" $ \(remoteDir, gitDir, fakeHome, p) -> do
-      withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
+      withSystemTempDirectory "funstation-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         -- Write a script that touches the sentinel file
         scriptFile <- do
@@ -158,7 +158,7 @@ spec =
         shouldBeM True $ doesPathExist sentinelFile
 
     it "does not run runAfterChange when nothing changed" $ \(remoteDir, gitDir, fakeHome, p) -> do
-      withSystemTempDirectory "wshs-sentinel" $ \sentinelDir -> do
+      withSystemTempDirectory "funstation-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         let sf = sentinelDir </> "after.sh"
         writeFile sf $ "touch " <> sentinelFile <> "\n"

@@ -20,7 +20,7 @@ import Data.Text.Lazy.Encoding qualified as TL
 
 -- import Data.Text.Encoding (encodeUtf8)
 import Data.Yaml (decodeThrow)
-import WSHS hiding (main)
+import Funstation hiding (main)
 import Control.Monad (forM_)
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
@@ -61,7 +61,7 @@ createTestDir path = do
 
 configText :: Text
 configText = [r|
-configDir: "~/.wshs"
+configDir: "~/.funstation"
 configRepoUrl: "https://github.com/joelmccracken/dotfiles"
 configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
 configRepoBranch: "main"

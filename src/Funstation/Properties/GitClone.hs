@@ -5,14 +5,14 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module WSHS.Properties.GitClone (GitCloneP(..)) where
+module Funstation.Properties.GitClone (GitCloneP(..)) where
 
 import Control.Monad.Except (throwError)
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
-import WSHS.Properties.HasGit (HasGitP(..))
-import WSHS.Properties.GitHomeDir (gitDirRemoteUrl)
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
+import Funstation.Properties.HasGit (HasGitP(..))
+import Funstation.Properties.GitHomeDir (gitDirRemoteUrl)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import GHC.Generics (Generic)

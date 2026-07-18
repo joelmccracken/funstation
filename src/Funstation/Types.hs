@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 
-module WSHS.Types where
+module Funstation.Types where
 
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map

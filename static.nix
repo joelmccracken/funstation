@@ -34,7 +34,7 @@
    staticish-overlay = final: prev: {
      make-staticish = {name, drv, exe}:
        let
-         name = "wshs-staticsh";
+         name = "funstation-staticsh";
          pkgs = final;
          targetPlatform = drv.stdenv.targetPlatform;
        in
@@ -111,7 +111,7 @@
    project = pkgs:
      let
        add-static-libs-to-darwin = pkgs.lib.mkIf pkgs.hostPlatform.isDarwin {
-         packages.wshs.ghcOptions = [
+         packages.funstation.ghcOptions = [
            "-L${pkgs.lib.getLib pkgs.static-gmp}/lib"
          ];
        };
@@ -133,7 +133,7 @@
    pkgs = mkNixpkgsForSystem system;
  in
      pkgs.make-staticish {
-           name = "wshs-static";
-           drv = (project pkgs).flake'.packages."wshs:exe:wshs";
-           exe = "wshs";
+           name = "funstation-static";
+           drv = (project pkgs).flake'.packages."funstation:exe:fun";
+           exe = "fun";
      }

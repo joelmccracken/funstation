@@ -1,4 +1,4 @@
-# Revision history for wshs
+# Revision history for funstation
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

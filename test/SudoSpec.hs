@@ -4,7 +4,7 @@
 module SudoSpec (spec) where
 
 import Test.Hspec
-import WSHS.Sudo
+import Funstation.Sudo
 import Data.Text qualified as T
 import System.IO.Temp (withSystemTempDirectory)
 import System.FilePath ((</>))
@@ -25,7 +25,7 @@ withFileMode path newMode action =
 
 spec :: Spec
 spec = do
-  let withTempDir fn = withSystemTempDirectory "wshs-sudo-test" $ \d -> fn d
+  let withTempDir fn = withSystemTempDirectory "funstation-sudo-test" $ \d -> fn d
 
   describe "needsSudoRead" $ do
     it "returns False for a user-owned readable file" $ withTempDir $ \tmpDir -> do

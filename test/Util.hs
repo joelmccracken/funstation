@@ -3,8 +3,8 @@ module Util where
 import Test.Hspec
 import Data.Text qualified as T
 
-import WSHS.Types
-import WSHS.Properties.GitHomeDir (GitHomeDirP (..))
+import Funstation.Types
+import Funstation.Properties.GitHomeDir (GitHomeDirP (..))
 
 
 

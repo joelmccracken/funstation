@@ -5,11 +5,11 @@
 {-# LANGUAGE DeriveAnyClass         #-}
 {-# LANGUAGE DuplicateRecordFields  #-}
 
-module WSHS.Properties.BitwardenSecrets where
+module Funstation.Properties.BitwardenSecrets where
 
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
 import Shh (captureTrim, (|>), Failure)
 import Data.Aeson (FromJSON, ToJSON, eitherDecode)
 import GHC.Generics (Generic)
@@ -58,7 +58,7 @@ bwCmd args = do
 -- | Read the last-sync POSIX timestamp from state file; returns 0 if absent.
 getLastSyncTs :: FilePath -> IO Integer
 getLastSyncTs home = do
-  let tsFile = home <> "/.local/state/wshs/bitwarden-secrets/last-sync-ts"
+  let tsFile = home <> "/.local/state/funstation/bitwarden-secrets/last-sync-ts"
   exists <- doesFileExist tsFile
   if not exists
     then return 0
@@ -69,7 +69,7 @@ getLastSyncTs home = do
 -- | Persist the current POSIX time as the last-sync timestamp.
 saveLastSyncTs :: FilePath -> IO ()
 saveLastSyncTs home = do
-  let dir    = home <> "/.local/state/wshs/bitwarden-secrets"
+  let dir    = home <> "/.local/state/funstation/bitwarden-secrets"
       tsFile = dir <> "/last-sync-ts"
   createDirectoryIfMissing True dir
   now <- round <$> getPOSIXTime

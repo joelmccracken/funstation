@@ -15,8 +15,8 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe)
 
-import WSHS.Types
-import WSHS.Properties.GitClone (GitCloneP (..))
+import Funstation.Types
+import Funstation.Properties.GitClone (GitCloneP (..))
 import Util
 
 -- | Run a WS action with a minimal configuration
@@ -36,7 +36,7 @@ git args = exe ("git" : args)
 --   - branch "feature" additionally containing "feature.txt"
 setupRemote :: FilePath -> IO ()
 setupRemote remoteDir =
-  withSystemTempDirectory "wshs-staging" $ \stagingDir -> do
+  withSystemTempDirectory "funstation-staging" $ \stagingDir -> do
     git ["-c", "init.defaultBranch=main", "init", stagingDir]
     git ["-C", stagingDir, "config", "user.email", "test@example.com"]
     git ["-C", stagingDir, "config", "user.name",  "Test User"]
@@ -62,7 +62,7 @@ setupRemote remoteDir =
 -- safe to share across all examples.
 withRemote :: (FilePath -> IO ()) -> IO ()
 withRemote action =
-  withSystemTempDirectory "wshs-remote" $ \remoteRoot -> do
+  withSystemTempDirectory "funstation-remote" $ \remoteRoot -> do
     let remoteDir = remoteRoot </> "remote"
     createDirectoryIfMissing True remoteDir
     -- Point the bare repo's HEAD at "main" so a no-branch clone checks it out.
@@ -75,7 +75,7 @@ withRemote action =
 -- with the shared remoteDir.
 withPerTestDirs :: ActionWith (FilePath, FilePath, GitCloneP) -> ActionWith FilePath
 withPerTestDirs inner remoteDir =
-  withSystemTempDirectory "wshs-test" $ \rootDir -> do
+  withSystemTempDirectory "funstation-test" $ \rootDir -> do
     let clonePath = rootDir </> "clone"  -- intentionally not created yet
     let p = mkProp remoteDir clonePath Nothing
     inner (remoteDir, clonePath, p)

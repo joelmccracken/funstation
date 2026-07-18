@@ -5,13 +5,13 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module WSHS.Properties.GitHomeDir where
+module Funstation.Properties.GitHomeDir where
 
 import Control.Monad.Except (throwError)
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
-import WSHS.Properties.HasGit (HasGitP(..))
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
+import Funstation.Properties.HasGit (HasGitP(..))
 import Shh (exe, captureTrim, (|>), Proc, Failure)
 import Data.Text (Text)
 import Data.Text qualified as T

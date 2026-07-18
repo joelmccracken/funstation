@@ -1,4 +1,4 @@
-configDir: "~/.config/wshs"
+configDir: "~/.config/funstation"
 configRepoUrl: "https://github.com/joelmccracken/dotfiles"
 configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
 configRepoBranch: "master"
@@ -22,10 +22,10 @@ properties:
         build-users-group = nixbld
   - type: HomeManager
     params:
-      dir: "~/.config/wshs/nix"
+      dir: "~/.config/funstation/nix"
   - type: HomebrewBundle
     params:
-      brewfile: "~/.config/wshs/Brewfile"
+      brewfile: "~/.config/funstation/Brewfile"
   - type: BitwardenSecrets
     params:
       syncIntervalDays: 7

@@ -3,14 +3,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.AptUpdate where
+module Funstation.Properties.AptUpdate where
 
-import WSHS.Types
-import WSHS.Commands
+import Funstation.Types
+import Funstation.Commands
 import Shh (devNull, (&>))
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
-import WSHS.Proc
+import Funstation.Proc
 
 data AptUpdateP = AptUpdateP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)

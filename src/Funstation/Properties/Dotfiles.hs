@@ -5,14 +5,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.Dotfiles where
+module Funstation.Properties.Dotfiles where
 
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Reader (MonadReader)
 import Control.Monad.IO.Class (MonadIO)
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
 import Shh (exe, devNull, (&>), captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T

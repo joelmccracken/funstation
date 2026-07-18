@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 
-module WSHS.Commands where
+module Funstation.Commands where
 
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -21,9 +21,9 @@ import Control.Monad.Reader (MonadReader, asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Shh (exe, devNull, (&>), captureTrim, (|>), Failure)
 import Control.Monad.Except (MonadError, throwError)
-import WSHS.Types
-import WSHS.Sudo
-import WSHS.Proc
+import Funstation.Types
+import Funstation.Sudo
+import Funstation.Proc
 
 detectOS :: (MonadIO m, MonadError WSError m) => m OS
 detectOS = do

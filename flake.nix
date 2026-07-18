@@ -13,7 +13,7 @@
           overlays = [ haskellNix.overlay
                        (final: _prev: {
                          # This overlay adds our project to pkgs
-                         wshsProject =
+                         funstationProject =
                            final.haskell-nix.project' {
                              src = ./.;
                              inherit compiler-nix-name;
@@ -34,7 +34,7 @@
                        })
                      ];
       pkgs = import nixpkgs { inherit system overlays; inherit (haskellNix) config; };
-      flake = pkgs.wshsProject.flake {};
+      flake = pkgs.funstationProject.flake {};
       static = import ./static.nix { inherit self nixpkgs haskellNix system compiler-nix-name; };
     in flake //
       {

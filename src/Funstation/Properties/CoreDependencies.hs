@@ -4,10 +4,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.CoreDependencies where
+module Funstation.Properties.CoreDependencies where
 
-import WSHS.Types
-import WSHS.Properties.HasGit
+import Funstation.Types
+import Funstation.Properties.HasGit
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 

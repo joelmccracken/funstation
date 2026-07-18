@@ -4,13 +4,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module WSHS.Properties.HomebrewBundle where
+module Funstation.Properties.HomebrewBundle where
 
 import Control.Monad.Except (throwError)
-import WSHS.Types
-import WSHS.Commands
-import WSHS.Proc
-import WSHS.Properties.Homebrew
+import Funstation.Types
+import Funstation.Commands
+import Funstation.Proc
+import Funstation.Properties.Homebrew
 import Shh (exe, devNull, (&>))
 import Data.Text (Text)
 import Data.Text qualified as T
