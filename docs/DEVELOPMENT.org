@@ -1,0 +1,68 @@
+#+title: DEVELOPMENT
+
+Misc notes/documentation
+
+* notes from setting up the vmware fusion virtual machine
+- in vmware fusion, create new vm. drag macos14install.dcmg to interface
+- pick macos 14
+- customize settings, rename to `macOS_14`
+- defaults for other stuff:
+  - memory 4GB
+  - hard disk 80GB
+  - network shared with mac(NAT)
+  - 2 cpu cores, CD/DVD,USB Controller, Sound Card
+- TODO disable side channel hardware mitigations later
+- booting installer, following defaults
+- ... select defaults, skip any setup when possible
+  - looked tosee if I could change the names of files in vmdir, no good. they
+    look ok now though since I set a good vm name from the beginning
+  - skip migration assistant
+  - skip icloud/appleid
+    - will I need to do it later?
+  - skip location services
+- account: username: "user", password: "password"
+- new york closest city
+- skip screen time setup
+- take snapshot "post-install"
+- unmount the intaller dvd/iso
+- set up vmware tools for file sharing
+  - download vmware tools iso (darwin.iso)
+  - select image via dvd button
+  - "connect cd/dvd"
+  - do installer
+    - allow, open system menu and press allow button also
+  - restart logic of installer is weird;
+    - I tried to restart but error "close installer to restart"
+    - had to press installer blue "restart" button to actually close it
+  - try enabling file sharing in menu
+    - "sharing settings" button
+    - enable shared folders
+    - select ~/vmwareshared
+    - its not working? expected dir is empy
+  - didn't work! went in and found security had blocked the extension again?
+    - re-approaved it then "restart"
+  - sharing now seems to work
+  - pull vmwareshared dir to finder favorites
+  - "vmware-tools-daemon" would like to ...
+    - allow, approve, open system settings and OK/toggle
+  - eject vmware tools iso
+- open terminal, drag to dock
+- snapshot: "post-vmwaretools-setup-sharing-works"
+  - can taked snapshot with Cmd+shift+s
+  - manage them with Cmd+s
+  - click outide of vm first, need vm "chrome" selected
+- going to try first run
+- shut down, disable side channel mitigations, start back up
+- run the test script once, hit permissions, killed script
+  - allow vmtools-daemon access terminal
+  - allow terminal access network volume
+  - STARTING_SNAPSHOT='after-allow-vmware-tools-permissions'
+- run the test script again, hit permissions, kill script
+- hit an anohter jpermisssionms thing but so far along... in the middle of the
+  nix install
+  - I _think_ this is basically flagging the edit of fstab. going to try
+    pre-enabling full disk access
+  - done; we'll see if the dialog still bothers me
+- SUCCESS. the entire basic run of wshs bootstrap proceeded without issue
+- next time, perhaps try disabling SIP, adding the required permissions via a
+  cli sqlite tool, and then reenabling SIP
