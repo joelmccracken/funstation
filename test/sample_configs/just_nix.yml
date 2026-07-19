@@ -1,7 +1,3 @@
-configDir: "~/.config/funstation"
-configRepoUrl: "https://github.com/joelmccracken/dotfiles"
-configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
-configRepoBranch: "wshs"
 workstations:
   - workstationName: "aeglos"
 properties:

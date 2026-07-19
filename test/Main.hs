@@ -72,10 +72,6 @@ createTestDir path = do
 
 configText :: Text
 configText = [r|
-configDir: "~/.funstation"
-configRepoUrl: "https://github.com/joelmccracken/dotfiles"
-configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
-configRepoBranch: "main"
 properties:
 - type: GitHomeDir
   params:

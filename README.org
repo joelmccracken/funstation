@@ -31,10 +31,6 @@ Here is an example of a simple config file. It shows roughly how I have my
 system set up currently
 
 #+begin_src yaml
-configDir: "~/.config/funstation"
-configRepoUrl: "https://github.com/joelmccracken/dotfiles"
-configRepoOrigin: "git@github.com:joelmccracken/dotfiles.git"
-configRepoBranch: "master"
 workstations:
   - workstationName: "aeglos"
 properties:
@@ -42,7 +38,7 @@ properties:
     params:
       gitDir: .git-dir
       remoteUrl: "git@github.com:joelmccracken/dotfiles.git"
-      branch: wshs-new-technique
+      branch: master
   - type: NixDaemon
     params:
       interactive: False
