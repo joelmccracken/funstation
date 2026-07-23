@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module GitHomeDirSpec (spec) where
 
@@ -22,8 +23,8 @@ import Util
 -- | Run a WS action with a minimal configuration
 runWS :: WS a -> IO a
 runWS action = do
-  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = "" }
-  let settings = Settings { opts = opts, sudoCmd = "sudo" }
+  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
+  let settings = Settings { opts = opts, sudoCmd = "sudo", workstation = "workstation" }
   let initialState = WSState { props = Set.empty }
   failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
 

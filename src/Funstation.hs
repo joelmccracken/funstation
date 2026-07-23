@@ -24,7 +24,9 @@ import Funstation.Properties.BitwardenSecrets ()
 
 import Options.Applicative
 import Options.Applicative qualified as App
+import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Maybe (fromMaybe)
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
@@ -34,6 +36,8 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except (MonadError, runExceptT)
 import Data.Set (Set)
+import System.Directory (getHomeDirectory, doesFileExist, createDirectoryIfMissing)
+import System.FilePath (takeDirectory, (</>))
 import System.Exit (exitFailure, exitSuccess)
 
 getProp :: Property -> IsProp
@@ -47,13 +51,6 @@ getProp (BitwardenSecrets p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = pure Bootstrap
-
-statusParser :: Parser Command
-statusParser = Status
-  <$> optional (strOption
-      ( long "config"
-     <> metavar "FILE"
-     <> help "Path to the configuration YAML file (default: ~/.config/funstation/config.yaml)" ))
 
 nixSubcommandParser :: Parser NixSubcommand
 nixSubcommandParser = subparser
@@ -74,7 +71,7 @@ commandParser = subparser
       ( progDesc "Nix package manager utilities" )
     )
  <> App.command "status"
-    ( info (statusParser <**> helper)
+    ( info (pure Status <**> helper)
       ( progDesc "Show status of managed properties" )
     )
   )
@@ -106,11 +103,11 @@ optionsParser = Options
      <> metavar "CONFIG_FILE"
      <> help "Path to the configuration YAML file"
       )
-  <*> strOption
+  <*> optional (T.pack <$> strOption
       ( long "workstation"
      <> metavar "WORKSTATION"
      <> help "Name of the current workstation. Usable by properties."
-      )
+      ))
 
 parseOptions :: IO Options
 parseOptions =
@@ -119,6 +116,96 @@ parseOptions =
       <> progDesc "funstation - a workstation configuration tool"
       <> header "fun - manage workstation configurations"
     )
+
+-- | Path to the file where the resolved workstation name is persisted, so other
+-- tools can read it. Lives in the state dir, matching the BitwardenSecrets convention.
+workstationNameStateFile :: IO FilePath
+workstationNameStateFile = do
+  home <- getHomeDirectory
+  pure $ home </> ".local" </> "state" </> "funstation" </> "workstation"
+
+-- | Read the saved workstation name, if the state file exists and is non-empty.
+readWorkstationNameFromState :: IO (Maybe Text)
+readWorkstationNameFromState = do
+  path <- workstationNameStateFile
+  exists <- doesFileExist path
+  if not exists
+    then pure Nothing
+    else do
+      contents <- T.strip <$> TIO.readFile path
+      pure $ if T.null contents then Nothing else Just contents
+
+-- | Persist the workstation name to the state file (creating parent dirs).
+writeWorkstationState :: Text -> IO ()
+writeWorkstationState name = do
+  path <- workstationNameStateFile
+  createDirectoryIfMissing True (takeDirectory path)
+  TIO.writeFile path (name <> "\n")
+
+-- | The set of valid workstation names: the names declared in the config, or the
+-- single default @"workstation"@ when the config declares none.
+knownWorkstations :: [Text] -> [Text]
+knownWorkstations [] = ["workstation"]
+knownWorkstations ns = ns
+
+-- | The resolved workstation name, tagged with where it came from. The source
+-- determines side effects: only a name that came from the CLI is written back to the
+-- saved state.
+data WorkstationSource
+  = FromCLI Text        -- ^ supplied via @--workstation@ on the command line
+  | FromStateFile Text  -- ^ read from the saved state file
+  | FromDefault Text    -- ^ the sole known workstation (a single declared name, or the
+                        --   built-in @"workstation"@ default)
+  deriving (Show, Eq)
+
+-- | The resolved workstation name, regardless of its source.
+workstationSourceName :: WorkstationSource -> Text
+workstationSourceName (FromCLI name)       = name
+workstationSourceName (FromStateFile name) = name
+workstationSourceName (FromDefault name)   = name
+
+-- | Pure core of workstation resolution. Given the config's declared names, the raw
+-- CLI @--workstation@ value, and the (non-empty) saved state, decide the current name
+-- and where it came from. CLI wins; otherwise a saved name is used; otherwise the
+-- single known name is used, erroring when several are declared. Any name coming from
+-- CLI or state is validated against the known set.
+resolveWorkstationName
+  :: Configuration   -- ^ workstation names declared in the config (before defaulting)
+  -> Maybe Text      -- ^ raw CLI @--workstation@ value
+  -> Maybe Text      -- ^ saved state-file contents, if present and non-empty
+  -> Either Text WorkstationSource  -- ^ @Left errorMessage@ or @Right source@
+resolveWorkstationName cfg cliName savedName =
+  case cliName of
+    Just name -> FromCLI <$> validate "--workstation" name
+    Nothing -> case savedName of
+      Just name -> FromStateFile <$> validate "saved state" name
+      Nothing -> case known of
+        [single] -> Right (FromDefault single)
+        _ -> Left "multiple workstations are defined; specify one with --workstation"
+ where
+  configNames = workstationName <$> cfg.workstations
+  known = knownWorkstations configNames
+  validate src name
+    | name `elem` known = Right name
+    | otherwise = Left $ "unknown workstation " <> name <> " (from " <> src
+                      <> "); known workstations: " <> T.intercalate ", " known
+
+-- | Resolve the current workstation name, reading and (when the name comes from the
+-- CLI) persisting the state file. Errors abort with a clear message, consistent with
+-- how config-decode failures surface.
+resolveWorkstation :: Configuration -> Options -> IO Text
+resolveWorkstation cfg opts = do
+  saved <- readWorkstationNameFromState
+  case resolveWorkstationName cfg opts.workstation saved of
+    Left err -> do
+      putStrLn $ "fun: error: " <> T.unpack err
+      exitFailure
+    Right source -> do
+      case source of
+        FromCLI name -> writeWorkstationState name
+        FromStateFile _ -> pure ()
+        FromDefault _ -> pure ()
+      pure (workstationSourceName source)
 
 ensureProperty
   :: ( Prop p
@@ -158,21 +245,25 @@ main :: IO ()
 main = do
   opts <- parseOptions
 
+  -- Resolve (and, when given on the CLI, persist) the current workstation name
+  -- once, from the global config, and make it available to every command.
+  cfg <- decodeFileThrow opts.configPath :: IO Configuration
+  ws <- resolveWorkstation cfg opts
+
   -- Initialize sudo caching if requested
   sudoThread <- if opts.sudoCache
     then initSudoCache opts.sudoPassFile
     else pure Nothing
 
   case opts.command of
-    Bootstrap -> doBootstrap opts opts.configPath opts.workstation
-    Nix NixRestart -> doNixRestart opts
-    Status mCfg -> doStatus opts mCfg
+    Bootstrap -> doBootstrap opts ws cfg
+    Nix NixRestart -> doNixRestart opts ws
+    Status -> doStatus opts ws cfg
 
   -- Clean up sudo refresh thread
   maybe (pure ()) killThread  sudoThread
  where
-  doBootstrap opts cfgPath ws = do
-    cfg <- decodeFileThrow cfgPath :: IO Configuration
+  doBootstrap opts ws cfg = do
     let
       bootstrapAct = do
         putStrLn' $ "Workstation: " <> ws
@@ -184,23 +275,19 @@ main = do
         (runExceptT
            (runReaderT
               bootstrapAct
-              (settings opts)))
+              (settings opts ws)))
         wsState
     failLeft result
 
   wsState = WSState { props = mempty }
-  settings opts = Settings { opts = opts, sudoCmd = "sudo" }
+  settings opts ws = Settings { opts = opts, sudoCmd = "sudo", workstation = ws }
 
-  doNixRestart opts = do
+  doNixRestart opts ws = do
     result <-
-      runExceptT (runReaderT restartNixDaemon
-        (Settings { opts = opts, sudoCmd = "sudo" }))
+      runExceptT (runReaderT restartNixDaemon (settings opts ws))
     failLeft result
 
-  doStatus opts mCfg = do
-    let cfgPath = fromMaybe "~/.config/funstation/config.yaml" (fmap T.pack mCfg)
-    expandedCfgPath <- T.unpack <$> expandPath cfgPath
-    cfg <- decodeFileThrow expandedCfgPath :: IO Configuration
+  doStatus opts ws cfg = do
     let gitHomeDirs = [ p | GitHomeDir p <- cfg.properties ]
     case gitHomeDirs of
       [] -> putStrLn "Nothing to report."
@@ -214,8 +301,7 @@ main = do
                                       , "status" ]
                    ] id
 
-        result <- runExceptT $ runReaderT runGitStatus
-          (Settings { opts = opts, sudoCmd = "sudo" })
+        result <- runExceptT $ runReaderT runGitStatus (settings opts ws)
         void $ failLeft result
 
 failLeft :: MonadIO m => Either WSError a -> m a

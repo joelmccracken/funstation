@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module Funstation.Types where
 
@@ -30,6 +31,7 @@ type WSStack a = ReaderT Settings (ExceptT WSError (StateT WSState IO)) a
 data Settings = Settings
   { opts :: Options
   , sudoCmd :: String  -- ^ Command to use for privilege escalation, e.g. "sudo" or "env" in tests
+  , workstation :: Text -- ^ Resolved current workstation name (see 'Options.workstation' for the raw CLI input)
   }
 
 data Options = Options
@@ -39,7 +41,7 @@ data Options = Options
   , verbose :: Bool  -- ^ If True, print each command before running it
   , interactive :: Bool  -- ^ If True, prompt user before each command
   , configPath :: FilePath -- ^ Path to configuration file, needed if not in default location
-  , workstation :: Text -- ^ Workstation name, needed if multiple workstations available
+  , workstation :: Maybe Text -- ^ Raw workstation name from the CLI, if provided; resolved into 'Settings.workstation'
   }
   deriving (Show)
 
@@ -70,8 +72,6 @@ data Command
   = Bootstrap
   | Nix NixSubcommand
   | Status
-    { configFile :: Maybe FilePath
-    }
   deriving (Show)
 
 -- Prop class and existential

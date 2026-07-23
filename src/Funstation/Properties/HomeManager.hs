@@ -44,7 +44,7 @@ mkFlakeOut workstation = do
 getWorkstation :: (MonadReader Settings m, MonadError WSError m) => m Text
 getWorkstation = do
   settings <- ask
-  pure settings.opts.workstation
+  pure settings.workstation
 
 instance Prop HomeManagerP where
   desc _ = "home-manager configuration"

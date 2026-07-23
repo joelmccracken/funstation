@@ -12,6 +12,7 @@ import Funstation.Properties.HomeManager (HomeManagerP)
 import Funstation.Properties.HomebrewBundle (HomebrewBundleP)
 import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP)
 import Data.Aeson.Types hiding (Parser, Options)
+import Data.Text (Text)
 import GHC.Generics (Generic)
 
 data Property
@@ -40,6 +41,19 @@ instance FromJSON Property where
                                                     }
                                                 }
 
-data Configuration = Configuration
-  { properties :: [Property]
+data Workstation = Workstation
+  { workstationName :: Text
   } deriving (Generic, Show, FromJSON)
+
+data Configuration = Configuration
+  { workstations :: [Workstation]
+  , properties :: [Property]
+  } deriving (Generic, Show)
+
+-- Hand-written so a missing `workstations` key defaults to [] instead of
+-- failing to parse (existing configs and tests may omit it).
+instance FromJSON Configuration where
+  parseJSON = withObject "Configuration" $ \o ->
+    Configuration
+      <$> o .:? "workstations" .!= []
+      <*> o .:  "properties"
