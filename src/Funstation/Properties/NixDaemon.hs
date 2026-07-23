@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module Funstation.Properties.Nix where
+module Funstation.Properties.NixDaemon where
 
 import Control.Monad.Except (throwError)
 import Funstation.Types

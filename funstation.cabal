@@ -69,7 +69,7 @@ library
                       Funstation.Configuration,
                       Funstation.Properties.Dotfiles, Funstation.Properties.HasGit, Funstation.Properties.GitHomeDir, Funstation.Properties.GitClone,
                       Funstation.Properties.XCodeCLITools, Funstation.Properties.Homebrew, Funstation.Properties.HomebrewBundle,
-                      Funstation.Properties.AptUpdate, Funstation.Properties.CoreDependencies, Funstation.Properties.Nix,
+                      Funstation.Properties.AptUpdate, Funstation.Properties.CoreDependencies, Funstation.Properties.NixDaemon,
                       Funstation.Properties.HomeManager, Funstation.Properties.BitwardenSecrets
 
     -- Modules included in this library but not exported.

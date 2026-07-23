@@ -7,7 +7,7 @@ module Funstation.Configuration where
 import Funstation.Properties.GitHomeDir  (GitHomeDirP)
 import Funstation.Properties.GitClone    (GitCloneP)
 import Funstation.Properties.Dotfiles    (DotfilesP)
-import Funstation.Properties.Nix         (NixDaemonP)
+import Funstation.Properties.NixDaemon         (NixDaemonP)
 import Funstation.Properties.HomeManager (HomeManagerP)
 import Funstation.Properties.HomebrewBundle (HomebrewBundleP)
 import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP)

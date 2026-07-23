@@ -18,7 +18,7 @@ import Funstation.Properties.Homebrew ()
 import Funstation.Properties.HomebrewBundle ()
 import Funstation.Properties.AptUpdate ()
 import Funstation.Properties.CoreDependencies
-import Funstation.Properties.Nix ()
+import Funstation.Properties.NixDaemon ()
 import Funstation.Properties.HomeManager ()
 import Funstation.Properties.BitwardenSecrets ()
 
