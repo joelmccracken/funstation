@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module GitCloneSpec (spec) where
+module Properties.GitCloneSpec (spec) where
 
 import Test.Hspec
 import Data.Text (Text)

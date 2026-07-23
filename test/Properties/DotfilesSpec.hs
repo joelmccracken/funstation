@@ -3,7 +3,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
 
-module DotfilesSpec (spec) where
+module Properties.DotfilesSpec (spec) where
 
 import Test.Hspec
 import Data.Text (Text)

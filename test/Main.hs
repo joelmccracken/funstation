@@ -35,10 +35,10 @@ import Shh.Internal (exe, devNull, (&>), Proc, Failure, captureTrim, (|>), tryFa
 import Data.ByteString.Lazy hiding (writeFile, readFile, length)
 import Data.Either (isRight)
 import qualified SudoSpec
-import qualified GitHomeDirSpec
-import qualified GitCloneSpec
 import qualified WorkstationSpec
-import qualified DotfilesSpec
+import qualified Properties.GitHomeDirSpec
+import qualified Properties.GitCloneSpec
+import qualified Properties.DotfilesSpec
 import Util
 import Funstation.Proc
 
@@ -101,8 +101,6 @@ main2 = hspec $ do
 
 main :: IO ()
 main = hspec $ do
-  DotfilesSpec.spec
-
   describe "fileContentsCheck" $ do
     let withTempDir fn =
           withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
@@ -271,14 +269,8 @@ main = hspec $ do
         Left _  -> True
         Right _ -> False
 
-  describe "sudo functionality" $  do
-    SudoSpec.spec
-
-  describe "GitHomeDirP" $
-    GitHomeDirSpec.spec
-
-  describe "GitCloneP" $
-    GitCloneSpec.spec
-
-  describe "workstation names" $
-    WorkstationSpec.spec
+  SudoSpec.spec
+  WorkstationSpec.spec
+  Properties.GitHomeDirSpec.spec
+  Properties.GitCloneSpec.spec
+  Properties.DotfilesSpec.spec

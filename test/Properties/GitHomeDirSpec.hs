@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module GitHomeDirSpec (spec) where
+module Properties.GitHomeDirSpec (spec) where
 
 import Test.Hspec
 import Data.Text (Text)
