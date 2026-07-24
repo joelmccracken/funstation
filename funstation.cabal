@@ -135,7 +135,7 @@ test-suite funstation-test
     default-language: GHC2021
 
     -- Modules included in this executable, other than Main.
-    other-modules:    SudoSpec, WorkstationSpec, Util,
+    other-modules:    SudoSpec, WorkstationSpec, UtilsSpec, Util,
                       Properties.GitHomeDirSpec, Properties.GitCloneSpec, Properties.DotfilesSpec
 
     -- LANGUAGE extensions used by modules in this package.
