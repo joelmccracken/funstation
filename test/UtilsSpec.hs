@@ -7,26 +7,21 @@ module UtilsSpec (spec) where
 
 import Test.Hspec
 import Data.Text qualified as T
-import Data.Set qualified as Set
-import Control.Monad.State (runStateT)
-import Control.Monad.Reader (runReaderT)
-import Control.Monad.Except (runExceptT)
 import System.Directory
 import System.FilePath ((</>))
-import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe, devNull, (&>), captureTrim, (|>), tryFailure)
 import Data.Either (isRight)
 
 import Funstation hiding (main, failLeft)
 import Funstation.Proc
-import TestHelpers
+import TestHelpers hiding (withTempDir)
+import TestHelpers qualified
 
 spec :: Spec
 spec = do
-  describe "fileContentsCheck" $ do
-    let withTempDir fn =
-          withSystemTempDirectory "funstation-fileContentsCheck-test" $ \tmpDir -> fn tmpDir
+  let withTempDir = TestHelpers.withTempDir "funstation-test"
 
+  describe "fileContentsCheck" $ do
     it "returns True when file exists with matching contents" $ withTempDir $ \tmpDir -> do
       let testFile = tmpDir </> "testfile"
       let content = "test content\nline 2\n"
@@ -65,9 +60,6 @@ spec = do
       result `shouldBe` True
 
   describe "fileContentsFix" $ do
-    let withTempDir fn =
-          withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
-
     it "returns Nothing when file already has correct contents" $ withTempDir $ \tmpDir -> do
       let testFile = tmpDir </> "testfile"
       let content = "correct content"
@@ -127,8 +119,6 @@ spec = do
       updatedContent `shouldBe` newContent
 
   describe "mkPrivCmd" $ do
-    let withTempDir fn = withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
-
     it "uses env prefix when path is user-owned (no sudo needed)" $ withTempDir $ \tmpDir -> do
       -- Path is user-owned → needsSudo returns False → exe ("env" : args)
       let outFile = tmpDir </> "out.txt"
@@ -160,8 +150,6 @@ spec = do
       result `shouldSatisfy` isRight
 
   describe "privCmd" $ do
-    let withTempDir fn = withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
-
     it "runs WriteAccess command on user-owned path without sudo" $ withTempDir $ \tmpDir -> do
       let outFile = tmpDir </> "out.txt"
       result <- runWS $ privCmd WriteAccess (T.pack tmpDir)

@@ -129,7 +129,7 @@ executable fun
 
 test-suite funstation-test
     -- Import common warning flags.
-    -- import:           warnings
+    import:           warnings
 
     -- Base language which the package is written in.
     default-language: GHC2021

@@ -6,15 +6,15 @@ module SudoSpec (spec) where
 import Test.Hspec
 import Funstation.Sudo
 import Data.Text qualified as T
-import System.IO.Temp (withSystemTempDirectory)
 import System.FilePath ((</>))
 import Shh.Internal (exe, captureTrim, (|>))
 
 import TestHelpers (shouldBeM, withFileMode)
+import TestHelpers qualified
 
 spec :: Spec
 spec = do
-  let withTempDir fn = withSystemTempDirectory "funstation-sudo-test" $ \d -> fn d
+  let withTempDir = TestHelpers.withTempDir "funstation-sudo-test"
 
   describe "needsSudoRead" $ do
     it "returns False for a user-owned readable file" $ withTempDir $ \tmpDir -> do

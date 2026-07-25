@@ -6,12 +6,7 @@
 module Properties.DotfilesSpec (spec) where
 
 import Test.Hspec
-import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Set qualified as Set
-import Control.Monad.State (runStateT)
-import Control.Monad.Reader (runReaderT)
-import Control.Monad.Except (runExceptT)
 import System.Directory
 import System.FilePath ((</>))
 import System.Posix.Files (createSymbolicLink)

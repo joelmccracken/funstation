@@ -8,7 +8,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Either (isRight)
-import Shh (exe, Cmd, tryFailure, (<<<))
+import Shh (exe, tryFailure, (<<<))
 import Data.ByteString.Lazy.Char8 qualified as LBS
 import System.FilePath (takeDirectory)
 import Control.Concurrent (forkIO, threadDelay, ThreadId)

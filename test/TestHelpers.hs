@@ -10,10 +10,15 @@ import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Except (runExceptT)
 import System.Posix.Files (setFileMode)
+import System.IO.Temp (withSystemTempDirectory)
 import Control.Exception (bracket_)
 
 import Funstation.Types
-import Funstation.Properties.GitHomeDir (GitHomeDirP (..))
+
+-- | Run an action with a fresh temporary directory, named with the given
+-- prefix. Partially apply the prefix to get a suite-local @withTempDir@.
+withTempDir :: String -> (FilePath -> IO a) -> IO a
+withTempDir = withSystemTempDirectory
 
 -- | Run a WS action with a minimal configuration.
 runWS :: WS a -> IO a
@@ -36,9 +41,11 @@ withFileMode path newMode action =
     (setFileMode path 0o644)
     action
 
+failLeft :: Either WSError a -> IO a
 failLeft result =
   case result of
     Left (WSFailure msg) -> fail $ "WS action failed: " <> T.unpack msg
+    Left WSAborted -> fail "WS action aborted"
     Right a -> pure a
 
 -- | Run a monadic action and assert its result equals the expected value.
