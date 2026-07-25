@@ -21,27 +21,11 @@ import Funstation hiding (main, failLeft)
 import Funstation.Proc
 import TestHelpers
 
--- | Run a WS action with a minimal configuration
-runWS :: WS a -> IO a
-runWS action = do
-  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
-  let settings = Settings { opts = opts, sudoCmd = "sudo", workstation = "workstation" }
-  let initialState = WSState { props = Set.empty }
-  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
-
--- | Run a WS action with a specific sudoCmd in Settings
-runWSWith :: String -> WS a -> IO a
-runWSWith sc action = do
-  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
-  let settings = Settings { opts = opts, sudoCmd = sc, workstation = "workstation" }
-  let initialState = WSState { props = Set.empty }
-  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
-
 spec :: Spec
 spec = do
   describe "fileContentsCheck" $ do
     let withTempDir fn =
-          withSystemTempDirectory "funstation-test" $ \tmpDir -> fn tmpDir
+          withSystemTempDirectory "funstation-fileContentsCheck-test" $ \tmpDir -> fn tmpDir
 
     it "returns True when file exists with matching contents" $ withTempDir $ \tmpDir -> do
       let testFile = tmpDir </> "testfile"

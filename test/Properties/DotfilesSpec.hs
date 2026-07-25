@@ -20,14 +20,6 @@ import System.IO.Temp (withSystemTempDirectory)
 import Funstation hiding (main, failLeft)
 import TestHelpers
 
--- | Run a WS action with a minimal configuration
-runWS :: WS a -> IO a
-runWS action = do
-  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
-  let settings = Settings { opts = opts, sudoCmd = "sudo", workstation = "workstation" }
-  let initialState = WSState { props = Set.empty }
-  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
-
 -- | Create a test file with content
 createTestFile :: FilePath -> String -> IO ()
 createTestFile path content = writeFile path content
