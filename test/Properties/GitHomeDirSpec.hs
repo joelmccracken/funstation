@@ -18,7 +18,7 @@ import Shh.Internal (exe, captureTrim, (|>))
 
 import Funstation.Types
 import Funstation.Properties.GitHomeDir (GitHomeDirP (..))
-import Util
+import TestHelpers
 
 -- | Run a WS action with a minimal configuration
 runWS :: WS a -> IO a

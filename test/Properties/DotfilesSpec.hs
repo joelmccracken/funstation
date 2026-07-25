@@ -18,7 +18,7 @@ import System.Posix.Files (createSymbolicLink)
 import System.IO.Temp (withSystemTempDirectory)
 
 import Funstation hiding (main, failLeft)
-import Util
+import TestHelpers
 
 -- | Run a WS action with a minimal configuration
 runWS :: WS a -> IO a

@@ -18,7 +18,7 @@ import Shh.Internal (exe)
 
 import Funstation.Types
 import Funstation.Properties.GitClone (GitCloneP (..))
-import Util
+import TestHelpers
 
 -- | Run a WS action with a minimal configuration
 runWS :: WS a -> IO a

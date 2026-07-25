@@ -8,20 +8,9 @@ import Funstation.Sudo
 import Data.Text qualified as T
 import System.IO.Temp (withSystemTempDirectory)
 import System.FilePath ((</>))
-import System.Posix.Files (setFileMode)
 import Shh.Internal (exe, captureTrim, (|>))
-import Control.Exception (bracket_)
 
-import Util (shouldBeM)
-
--- | Temporarily set a file's mode, restoring the original after the action.
--- Ensures cleanup can proceed even if the action throws.
-withFileMode :: FilePath -> Int -> IO a -> IO a
-withFileMode path newMode action =
-  bracket_
-    (setFileMode path (fromIntegral newMode))
-    (setFileMode path 0o644)
-    action
+import TestHelpers (shouldBeM, withFileMode)
 
 spec :: Spec
 spec = do

@@ -19,7 +19,7 @@ import Data.Either (isRight)
 
 import Funstation hiding (main, failLeft)
 import Funstation.Proc
-import Util
+import TestHelpers
 
 -- | Run a WS action with a minimal configuration
 runWS :: WS a -> IO a

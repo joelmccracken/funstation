@@ -1,12 +1,23 @@
-module Util where
+module TestHelpers where
 
 import Test.Hspec
 import Data.Text qualified as T
+import System.Posix.Files (setFileMode)
+import Control.Exception (bracket_)
 
 import Funstation.Types
 import Funstation.Properties.GitHomeDir (GitHomeDirP (..))
 
 
+
+-- | Temporarily set a file's mode, restoring the original after the action.
+-- Ensures cleanup can proceed even if the action throws.
+withFileMode :: FilePath -> Int -> IO a -> IO a
+withFileMode path newMode action =
+  bracket_
+    (setFileMode path (fromIntegral newMode))
+    (setFileMode path 0o644)
+    action
 
 failLeft result =
   case result of
