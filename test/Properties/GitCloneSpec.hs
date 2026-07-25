@@ -9,7 +9,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import System.Directory
 import System.FilePath ((</>))
-import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe)
 
 import Funstation.Types
@@ -25,7 +24,7 @@ git args = exe ("git" : args)
 --   - branch "feature" additionally containing "feature.txt"
 setupRemote :: FilePath -> IO ()
 setupRemote remoteDir =
-  withSystemTempDirectory "funstation-staging" $ \stagingDir -> do
+  withTempDir "funstation-staging" $ \stagingDir -> do
     git ["-c", "init.defaultBranch=main", "init", stagingDir]
     git ["-C", stagingDir, "config", "user.email", "test@example.com"]
     git ["-C", stagingDir, "config", "user.name",  "Test User"]
@@ -51,7 +50,7 @@ setupRemote remoteDir =
 -- safe to share across all examples.
 withRemote :: (FilePath -> IO ()) -> IO ()
 withRemote action =
-  withSystemTempDirectory "funstation-remote" $ \remoteRoot -> do
+  withTempDir "funstation-remote" $ \remoteRoot -> do
     let remoteDir = remoteRoot </> "remote"
     createDirectoryIfMissing True remoteDir
     -- Point the bare repo's HEAD at "main" so a no-branch clone checks it out.
@@ -64,7 +63,7 @@ withRemote action =
 -- with the shared remoteDir.
 withPerTestDirs :: ActionWith (FilePath, FilePath, GitCloneP) -> ActionWith FilePath
 withPerTestDirs inner remoteDir =
-  withSystemTempDirectory "funstation-test" $ \rootDir -> do
+  withTempDir "funstation-test" $ \rootDir -> do
     let clonePath = rootDir </> "clone"  -- intentionally not created yet
     let p = mkProp remoteDir clonePath Nothing
     inner (remoteDir, clonePath, p)

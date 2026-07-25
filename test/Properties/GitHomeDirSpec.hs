@@ -9,7 +9,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import System.Directory
 import System.FilePath ((</>))
-import System.IO.Temp (withSystemTempDirectory)
 import Shh.Internal (exe, captureTrim, (|>))
 
 import Funstation.Types
@@ -25,7 +24,7 @@ git args = exe $ ("git" : args)
 --   - "config/foo/bar.conf" (nested)
 setupRemote :: FilePath -> IO ()
 setupRemote remoteDir =
-  withSystemTempDirectory "funstation-staging" $ \stagingDir -> do
+  withTempDir "funstation-staging" $ \stagingDir -> do
     git ["-c", "init.defaultBranch=main", "init", stagingDir]
     git ["-C", stagingDir, "config", "user.email", "test@example.com"]
     git ["-C", stagingDir, "config", "user.name",  "Test User"]
@@ -44,7 +43,7 @@ setupRemote remoteDir =
 -- is safe to share across all examples.
 withRemote :: (FilePath -> IO ()) -> IO ()
 withRemote action =
-  withSystemTempDirectory "funstation-remote" $ \remoteRoot -> do
+  withTempDir "funstation-remote" $ \remoteRoot -> do
     let remoteDir = remoteRoot </> "remote"
     createDirectoryIfMissing True remoteDir
     git ["init", "--bare", remoteDir]
@@ -56,7 +55,7 @@ withRemote action =
 -- the shared remoteDir.
 withPerTestDirs :: ActionWith (FilePath, FilePath, FilePath, GitHomeDirP) -> ActionWith FilePath
 withPerTestDirs inner remoteDir =
-  withSystemTempDirectory "funstation-test" $ \rootDir -> do
+  withTempDir "funstation-test" $ \rootDir -> do
     let gitDir   = rootDir </> "gitdir"   -- intentionally not created yet
         fakeHome = rootDir </> "home"
     createDirectoryIfMissing True fakeHome
@@ -135,7 +134,7 @@ spec =
       shouldBeM "local-version\n" $ readFile (fakeHome </> "bashrc")
 
     it "runs runAfterChange script when changes are made" $ \(_remoteDir, _gitDir, _fakeHome, p) -> do
-      withSystemTempDirectory "funstation-sentinel" $ \sentinelDir -> do
+      withTempDir "funstation-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         -- Write a script that touches the sentinel file
         scriptFile <- do
@@ -147,7 +146,7 @@ spec =
         shouldBeM True $ doesPathExist sentinelFile
 
     it "does not run runAfterChange when nothing changed" $ \(_remoteDir, _gitDir, _fakeHome, p) -> do
-      withSystemTempDirectory "funstation-sentinel" $ \sentinelDir -> do
+      withTempDir "funstation-sentinel" $ \sentinelDir -> do
         let sentinelFile = sentinelDir </> "sentinel"
         let sf = sentinelDir </> "after.sh"
         writeFile sf $ "touch " <> sentinelFile <> "\n"

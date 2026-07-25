@@ -10,7 +10,6 @@ import Data.Text qualified as T
 import System.Directory
 import System.FilePath ((</>))
 import System.Posix.Files (createSymbolicLink)
-import System.IO.Temp (withSystemTempDirectory)
 
 import Funstation hiding (main, failLeft)
 import TestHelpers
@@ -30,7 +29,7 @@ spec = do
   describe "DotfileConfig" $ do
     let
       withTempSrcAndDest fn =
-        withSystemTempDirectory "funstation-test" $ \tmpDir -> do
+        withTempDir "funstation-test" $ \tmpDir -> do
           let srcDir = tmpDir </> "src"
           let destDir = tmpDir </> "dest"
           createDirectoryIfMissing True srcDir
