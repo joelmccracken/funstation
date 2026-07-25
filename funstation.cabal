@@ -134,7 +134,8 @@ test-suite funstation-test
     -- Base language which the package is written in.
     default-language: GHC2021
 
-    -- Modules included in this executable, other than Main.
+    -- Spec modules are discovered automatically by hspec-discover (see Main.hs),
+    -- but a plain .cabal file still needs each one listed here to compile/package it.
     other-modules:    SudoSpec, WorkstationSpec, UtilsSpec, TestHelpers,
                       Properties.GitHomeDirSpec, Properties.GitCloneSpec, Properties.DotfilesSpec
 
@@ -149,6 +150,9 @@ test-suite funstation-test
 
     -- The entrypoint to the test suite.
     main-is:          Main.hs
+
+    -- Generates the Main entrypoint by discovering all *Spec modules.
+    build-tool-depends: hspec-discover:hspec-discover
 
     -- Test dependencies.
     build-depends:
