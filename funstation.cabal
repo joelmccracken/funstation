@@ -64,7 +64,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Funstation, Funstation.Sudo, Funstation.Types, Funstation.Commands,
+    exposed-modules:  Funstation, Funstation.Utility, Funstation.Sudo, Funstation.Types, Funstation.Commands,
                       Funstation.Proc,
                       Funstation.Configuration,
                       Funstation.Properties.Dotfiles, Funstation.Properties.HasGit, Funstation.Properties.GitHomeDir, Funstation.Properties.GitClone,

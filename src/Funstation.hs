@@ -3,9 +3,10 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Funstation (module Funstation, module Funstation.Types, module Funstation.Configuration, module Funstation.Properties.Dotfiles, module Funstation.Sudo, module Funstation.Commands) where
+module Funstation (module Funstation, module Funstation.Types, module Funstation.Configuration, module Funstation.Properties.Dotfiles, module Funstation.Sudo, module Funstation.Commands, module Funstation.Utility) where
 
 import Funstation.Sudo
+import Funstation.Utility
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -38,7 +39,7 @@ import Control.Monad.Except (MonadError, runExceptT)
 import Data.Set (Set)
 import System.Directory (getHomeDirectory, doesFileExist, createDirectoryIfMissing)
 import System.FilePath (takeDirectory, (</>))
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit (exitFailure)
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
@@ -303,13 +304,3 @@ main = do
 
         result <- runExceptT $ runReaderT runGitStatus (settings opts ws)
         void $ failLeft result
-
-failLeft :: MonadIO m => Either WSError a -> m a
-failLeft = either (liftIO . handleFail) pure
- where
-  handleFail (WSFailure msg) = do
-    putStrLn $ "fun: error: " <> T.unpack msg
-    exitFailure
-  handleFail WSAborted = do
-    putStrLn "Run aborted."
-    exitSuccess
