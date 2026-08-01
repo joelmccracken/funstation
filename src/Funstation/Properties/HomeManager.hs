@@ -41,10 +41,10 @@ mkFlakeOut workstation = do
   username <- T.pack <$> getEnv "USER"
   pure $ ".#homeConfigurations.\"" <> username <> "@" <> workstation <> "\".activationPackage"
 
-getWorkstation :: (MonadReader Settings m, MonadError WSError m) => m Text
-getWorkstation = do
+getWorkstationNameRaw :: (MonadReader Settings m, MonadError WSError m) => m Text
+getWorkstationNameRaw = do
   settings <- ask
-  pure settings.workstation
+  pure (unWorkstationName settings.workstation)
 
 instance Prop HomeManagerP where
   desc _ = "home-manager configuration"
@@ -55,7 +55,7 @@ instance Prop HomeManagerP where
     if not hmInstalled
       then return False
       else do
-        ws <- getWorkstation
+        ws <- getWorkstationNameRaw
         flakeOut <- liftIO $ mkFlakeOut ws
         expandedDir <- expandPath p.dir
         let buildCmd = "cd " <> expandedDir
@@ -74,7 +74,7 @@ instance Prop HomeManagerP where
                 in fileExists (T.pack outPath)
 
   fixer p = do
-    ws <- getWorkstation
+    ws <- getWorkstationNameRaw
     flakeOut <- liftIO $ mkFlakeOut ws
     expandedDir <- expandPath p.dir
     let runCmd' = "cd " <> expandedDir

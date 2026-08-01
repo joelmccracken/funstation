@@ -36,11 +36,14 @@ detectOS = do
 
 detectLinuxOS :: MonadIO m => m OS
 detectLinuxOS = do
-  -- Check if it's Debian-based
-  debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
-  case debianCheck of
-    Right _ -> return Debian
-    Left _ -> return Unknown
+  nixosCheck <- cmd (exe "test" "-f" "/etc/NIXOS" &> devNull)
+  case nixosCheck of
+    Right _ -> return NixOS
+    Left _ -> do
+      debianCheck <- cmd (exe "test" "-f" "/etc/debian_version" &> devNull)
+      case debianCheck of
+        Right _ -> return Debian
+        Left _ -> return Unknown
 
 which :: MonadIO m => Text -> m (Maybe Text)
 which cmdName = do
@@ -211,14 +214,17 @@ aptInstall package = runCmd ["sudo", "apt-get", "install", "-y", package] (&> de
 -- | Restart the Nix daemon (OS-aware)
 restartNixDaemon :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m ()
 restartNixDaemon = do
-  os <- detectOS
+  os <- asks (.os)
   case os of
     MacOS -> do
       liftIO $ putStrLn "Restarting Nix daemon (macOS)..."
       void $ runCmd ["sudo", "launchctl", "unload", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"] id
       void $ runCmd ["sudo", "launchctl", "load", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"] id
-    Debian -> do
-      liftIO $ putStrLn "Restarting Nix daemon (Debian)..."
-      void $ runCmd ["sudo", "systemctl", "restart", "nix-daemon.service"] id
+    Debian -> systemdRestart "Debian"
+    NixOS -> systemdRestart "NixOS"
     Unknown -> throwError $ WSFailure "Cannot restart nix daemon: unknown OS"
   liftIO $ threadDelay 5000000
+ where
+  systemdRestart osName = do
+    liftIO $ putStrLn $ "Restarting Nix daemon (" <> osName <> ")..."
+    void $ runCmd ["sudo", "systemctl", "restart", "nix-daemon.service"] id

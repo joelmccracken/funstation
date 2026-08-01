@@ -7,12 +7,22 @@
 module Funstation.Types where
 
 import Data.Text (Text)
+import Data.String (IsString)
+import Data.Aeson (FromJSON)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except (ExceptT, MonadError)
+
+newtype WorkstationName = WorkstationName { unWorkstationName :: Text }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, IsString, FromJSON)
+
+newtype PropertyName = PropertyName { unPropertyName :: Text }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, IsString, FromJSON)
 
 -- Monad stack
 
@@ -31,7 +41,8 @@ type WSStack a = ReaderT Settings (ExceptT WSError (StateT WSState IO)) a
 data Settings = Settings
   { opts :: Options
   , sudoCmd :: String  -- ^ Command to use for privilege escalation, e.g. "sudo" or "env" in tests
-  , workstation :: Text -- ^ Resolved current workstation name (see 'Options.workstation' for the raw CLI input)
+  , workstation :: WorkstationName -- ^ Resolved current workstation name (see 'Options.workstation' for the raw CLI input)
+  , os :: OS -- ^ Detected operating system, resolved once at startup and read by OS-aware properties
   }
 
 data Options = Options
@@ -61,7 +72,7 @@ newtype WS a
 
 -- Enum/command types
 
-data OS = MacOS | Debian | Unknown
+data OS = MacOS | Debian | NixOS | Unknown
   deriving (Show, Eq)
 
 data NixSubcommand

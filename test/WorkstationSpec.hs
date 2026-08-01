@@ -4,18 +4,18 @@ module WorkstationSpec (spec) where
 
 import Test.Hspec
 import Data.Either
-import Data.Text (Text)
 import Funstation
   ( knownWorkstations
   , resolveWorkstationName
-  , WorkstationSource(..)
+  , WorkstationNameSource(..)
+  , WorkstationName
   , Configuration(..)
   , Workstation(..)
   )
 
 -- | Build a Configuration declaring the given workstation names (no properties).
-cfg :: [Text] -> Configuration
-cfg names = Configuration { workstations = map Workstation names, properties = [] }
+cfg :: [WorkstationName] -> Configuration
+cfg names = Configuration { workstations = map (\n -> Workstation n Nothing) names, properties = [] }
 
 spec :: Spec
 spec = do

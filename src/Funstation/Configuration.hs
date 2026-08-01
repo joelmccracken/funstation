@@ -11,8 +11,8 @@ import Funstation.Properties.NixDaemon         (NixDaemonP)
 import Funstation.Properties.HomeManager (HomeManagerP)
 import Funstation.Properties.HomebrewBundle (HomebrewBundleP)
 import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP)
+import Funstation.Types (WorkstationName, PropertyName)
 import Data.Aeson.Types hiding (Parser, Options)
-import Data.Text (Text)
 import GHC.Generics (Generic)
 
 data Property
@@ -41,13 +41,28 @@ instance FromJSON Property where
                                                     }
                                                 }
 
+-- | A registry entry: a 'Property' with an optional name. The name is a
+-- reference handle (used by 'Workstation.use')
+-- Unnamed entries run under the run-all default (a workstation with no 'use').
+data NamedProperty = NamedProperty
+  { name     :: Maybe PropertyName
+  , property :: Property
+  } deriving (Show, Generic)
+
+-- Hand-written so the optional @name@ sits at the same object level as @type@/@params@:
+-- read @name@ off the object, then decode the same object as a 'Property'
+instance FromJSON NamedProperty where
+  parseJSON = withObject "NamedProperty" $ \o ->
+    NamedProperty <$> o .:? "name" <*> parseJSON (Object o)
+
 data Workstation = Workstation
-  { workstationName :: Text
+  { workstationName :: WorkstationName
+  , use :: Maybe [PropertyName]  -- ^ Names of registry entries to run, in order; 'Nothing' runs all
   } deriving (Generic, Show, FromJSON)
 
 data Configuration = Configuration
   { workstations :: [Workstation]
-  , properties :: [Property]
+  , properties :: [NamedProperty]
   } deriving (Generic, Show)
 
 -- Hand-written so a missing `workstations` key defaults to [] instead of

@@ -20,17 +20,36 @@ import Funstation.Types
 withTempDir :: String -> (FilePath -> IO a) -> IO a
 withTempDir = withSystemTempDirectory
 
+-- | Build a minimal Settings for tests, parameterised by sudoCmd and detected OS.
+mkSettings :: String -> OS -> Settings
+mkSettings sc o =
+  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
+  in Settings { opts = opts, sudoCmd = sc, workstation = "workstation", os = o }
+
 -- | Run a WS action with a minimal configuration.
 runWS :: WS a -> IO a
 runWS = runWSWith "sudo"
 
 -- | Run a WS action with a specific sudoCmd in Settings.
 runWSWith :: String -> WS a -> IO a
-runWSWith sc action = do
-  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
-  let settings = Settings { opts = opts, sudoCmd = sc, workstation = "workstation" }
+runWSWith sc = runWSFull sc MacOS
+
+-- | Run a WS action with a specific detected OS in Settings.
+runWSWithOS :: OS -> WS a -> IO a
+runWSWithOS = runWSFull "sudo"
+
+-- | Core runner: given sudoCmd and OS, run the action and turn 'WSError's into
+-- test failures.
+runWSFull :: String -> OS -> WS a -> IO a
+runWSFull sc o action = do
   let initialState = WSState { props = Set.empty }
-  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) settings)) initialState
+  failLeft . fst =<< runStateT (runExceptT (runReaderT (unWS action) (mkSettings sc o))) initialState
+
+-- | Run a WS action with the given OS, returning an 'Either' to handle errors
+runWSEither :: OS -> WS a -> IO (Either WSError a)
+runWSEither o action = do
+  let initialState = WSState { props = Set.empty }
+  fst <$> runStateT (runExceptT (runReaderT (unWS action) (mkSettings "sudo" o))) initialState
 
 -- | Temporarily set a file's mode, restoring the original after the action.
 -- Ensures cleanup can proceed even if the action throws.

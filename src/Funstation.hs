@@ -28,9 +28,11 @@ import Options.Applicative qualified as App
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
+import Data.List (find)
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
 import Control.Monad (forM_, void)
 import Control.Concurrent (killThread)
 import Control.Monad.State
@@ -40,6 +42,40 @@ import Data.Set (Set)
 import System.Directory (getHomeDirectory, doesFileExist, createDirectoryIfMissing)
 import System.FilePath (takeDirectory, (</>))
 import System.Exit (exitFailure)
+
+-- | Select the properties to run for a workstation. If the workstation declares a
+-- 'use' list, resolve each name against the named registry entries (in list order),
+-- erroring on an unknown name. Otherwise — no 'use', or a name that isn't a declared
+-- workstation (e.g. the default @"workstation"@) — run the whole registry in file order.
+resolvePropertiesFor :: Configuration -> WorkstationName -> Either Text [Property]
+resolvePropertiesFor cfg ws =
+  case findWorkstation ws cfg.workstations of
+    Just (Workstation { use = Just names }) -> traverse resolveName names
+    _ -> Right runAll
+ where
+  runAll = map property cfg.properties
+  registry = buildRegistry cfg.properties
+  resolveName n =
+    case Map.lookup n registry of
+      Just p  -> Right p
+      Nothing -> Left $ unknownPropertyError n (Map.keys registry)
+
+-- | Find a workstation by its resolved name.
+findWorkstation :: WorkstationName -> [Workstation] -> Maybe Workstation
+findWorkstation nm = find (\w -> w.workstationName == nm)
+
+-- | A name→property lookup over the named registry entries. Unnamed entries are
+-- dropped (they can only run under the run-all default).
+buildRegistry :: [NamedProperty] -> Map.Map PropertyName Property
+buildRegistry = Map.fromList . mapMaybe namedEntry
+ where
+  namedEntry np = (, np.property) <$> np.name
+
+-- | The error for a 'use' reference that names no registry entry.
+unknownPropertyError :: PropertyName -> [PropertyName] -> Text
+unknownPropertyError n known =
+  "unknown property " <> unPropertyName n
+    <> "; known properties: " <> T.intercalate ", " (unPropertyName <$> known)
 
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
@@ -123,7 +159,7 @@ parseOptions =
 workstationNameStateFile :: IO FilePath
 workstationNameStateFile = do
   home <- getHomeDirectory
-  pure $ home </> ".local" </> "state" </> "funstation" </> "workstation"
+  pure $ home </> ".local" </> "state" </> "funstation" </> "workstationName"
 
 -- | Read the saved workstation name, if the state file exists and is non-empty.
 readWorkstationNameFromState :: IO (Maybe Text)
@@ -137,30 +173,27 @@ readWorkstationNameFromState = do
       pure $ if T.null contents then Nothing else Just contents
 
 -- | Persist the workstation name to the state file (creating parent dirs).
-writeWorkstationState :: Text -> IO ()
-writeWorkstationState name = do
+writeWorkstationState :: WorkstationName -> IO ()
+writeWorkstationState (WorkstationName raw) = do
   path <- workstationNameStateFile
   createDirectoryIfMissing True (takeDirectory path)
-  TIO.writeFile path (name <> "\n")
+  TIO.writeFile path (raw <> "\n")
 
 -- | The set of valid workstation names: the names declared in the config, or the
 -- single default @"workstation"@ when the config declares none.
-knownWorkstations :: [Text] -> [Text]
+knownWorkstations :: [WorkstationName] -> [WorkstationName]
 knownWorkstations [] = ["workstation"]
 knownWorkstations ns = ns
 
--- | The resolved workstation name, tagged with where it came from. The source
--- determines side effects: only a name that came from the CLI is written back to the
--- saved state.
-data WorkstationSource
-  = FromCLI Text        -- ^ supplied via @--workstation@ on the command line
-  | FromStateFile Text  -- ^ read from the saved state file
-  | FromDefault Text    -- ^ the sole known workstation (a single declared name, or the
-                        --   built-in @"workstation"@ default)
+-- | The resolved workstation name, tagged with where it came from. Required for code
+-- that varies depending upon the source
+data WorkstationNameSource
+  = FromCLI WorkstationName
+  | FromStateFile WorkstationName
+  | FromDefault WorkstationName
   deriving (Show, Eq)
 
--- | The resolved workstation name, regardless of its source.
-workstationSourceName :: WorkstationSource -> Text
+workstationSourceName :: WorkstationNameSource -> WorkstationName
 workstationSourceName (FromCLI name)       = name
 workstationSourceName (FromStateFile name) = name
 workstationSourceName (FromDefault name)   = name
@@ -174,7 +207,7 @@ resolveWorkstationName
   :: Configuration   -- ^ workstation names declared in the config (before defaulting)
   -> Maybe Text      -- ^ raw CLI @--workstation@ value
   -> Maybe Text      -- ^ saved state-file contents, if present and non-empty
-  -> Either Text WorkstationSource  -- ^ @Left errorMessage@ or @Right source@
+  -> Either Text WorkstationNameSource  -- ^ @Left errorMessage@ or @Right source@
 resolveWorkstationName cfg cliName savedName =
   case cliName of
     Just name -> FromCLI <$> validate "--workstation" name
@@ -186,15 +219,17 @@ resolveWorkstationName cfg cliName savedName =
  where
   configNames = workstationName <$> cfg.workstations
   known = knownWorkstations configNames
-  validate src name
-    | name `elem` known = Right name
-    | otherwise = Left $ "unknown workstation " <> name <> " (from " <> src
-                      <> "); known workstations: " <> T.intercalate ", " known
+  validate src rawName
+    | wn `elem` known = Right wn
+    | otherwise = Left $ "unknown workstation " <> rawName <> " (from " <> src
+                      <> "); known workstations: "
+                      <> T.intercalate ", " (unWorkstationName <$> known)
+   where wn = WorkstationName rawName
 
 -- | Resolve the current workstation name, reading and (when the name comes from the
 -- CLI) persisting the state file. Errors abort with a clear message, consistent with
 -- how config-decode failures surface.
-resolveWorkstation :: Configuration -> Options -> IO Text
+resolveWorkstation :: Configuration -> Options -> IO WorkstationName
 resolveWorkstation cfg opts = do
   saved <- readWorkstationNameFromState
   case resolveWorkstationName cfg opts.workstation saved of
@@ -246,10 +281,10 @@ main :: IO ()
 main = do
   opts <- parseOptions
 
-  -- Resolve (and, when given on the CLI, persist) the current workstation name
-  -- once, from the global config, and make it available to every command.
   cfg <- decodeFileThrow opts.configPath :: IO Configuration
   ws <- resolveWorkstation cfg opts
+
+  os <- failLeft =<< runExceptT detectOS
 
   -- Initialize sudo caching if requested
   sudoThread <- if opts.sudoCache
@@ -257,39 +292,48 @@ main = do
     else pure Nothing
 
   case opts.command of
-    Bootstrap -> doBootstrap opts ws cfg
-    Nix NixRestart -> doNixRestart opts ws
-    Status -> doStatus opts ws cfg
+    Bootstrap -> doBootstrap opts ws os cfg
+    Nix NixRestart -> doNixRestart opts ws os
+    Status -> doStatus opts ws os cfg
 
   -- Clean up sudo refresh thread
   maybe (pure ()) killThread  sudoThread
  where
-  doBootstrap opts ws cfg = do
+  -- Resolve the properties for a workstation
+  resolveProps ws cfg = case resolvePropertiesFor cfg ws of
+    Left err -> do
+      putStrLn $ "fun: error: " <> T.unpack err
+      exitFailure
+    Right ps -> pure ps
+
+  doBootstrap opts ws os cfg = do
+    props <- resolveProps ws cfg
     let
       bootstrapAct = do
-        putStrLn' $ "Workstation: " <> ws
+        putStrLn' $ "Workstation: " <> unWorkstationName ws
         putStrLn' "\nEnsuring properties..."
         ensureProperty (IsProp CoreDependenciesP)
-        forM_ (getProp <$> cfg.properties) ensureProperty
+        forM_ (getProp <$> props) ensureProperty
     result <-
       evalStateT
         (runExceptT
            (runReaderT
               bootstrapAct
-              (settings opts ws)))
+              (settings opts ws os)))
         wsState
     failLeft result
 
   wsState = WSState { props = mempty }
-  settings opts ws = Settings { opts = opts, sudoCmd = "sudo", workstation = ws }
+  settings opts ws os = Settings { opts = opts, sudoCmd = "sudo", workstation = ws, os = os }
 
-  doNixRestart opts ws = do
+  doNixRestart opts ws os = do
     result <-
-      runExceptT (runReaderT restartNixDaemon (settings opts ws))
+      runExceptT (runReaderT restartNixDaemon (settings opts ws os))
     failLeft result
 
-  doStatus opts ws cfg = do
-    let gitHomeDirs = [ p | GitHomeDir p <- cfg.properties ]
+  doStatus opts ws os cfg = do
+    props <- resolveProps ws cfg
+    let gitHomeDirs = [ p | GitHomeDir p <- props ]
     case gitHomeDirs of
       [] -> putStrLn "Nothing to report."
       (p:_) -> do
@@ -302,5 +346,5 @@ main = do
                                       , "status" ]
                    ] id
 
-        result <- runExceptT $ runReaderT runGitStatus (settings opts ws)
+        result <- runExceptT $ runReaderT runGitStatus (settings opts ws os)
         void $ failLeft result

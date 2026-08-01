@@ -1,13 +1,19 @@
 workstations:
+  # No `use:` -> runs the entire registry, in file order (unchanged behavior).
   - workstationName: "glamdring"
+  # NixOS box: selects a subset by name, omitting NixDaemon and HomebrewBundle.
+  - workstationName: "nixbox"
+    use: [home-dotfiles, home-manager, bitwarden]
 properties:
-  - type: GitHomeDir
+  - name: home-dotfiles
+    type: GitHomeDir
     params:
       gitDir: .git-dir
       remoteUrl: "git@github.com:joelmccracken/dotfiles.git"
       branch: master
       # homeDir: "~/temp_home"
-  - type: NixDaemon
+  - name: nix-daemon
+    type: NixDaemon
     params:
       interactive: False
       nixConf: |
@@ -16,12 +22,15 @@ properties:
         experimental-features = nix-command flakes
         trusted-users = root joelmccracken runner
         build-users-group = nixbld
-  - type: HomeManager
+  - name: home-manager
+    type: HomeManager
     params:
       dir: "~/.config/funstation/nix"
-  - type: HomebrewBundle
+  - name: brew-bundle
+    type: HomebrewBundle
     params:
       brewfile: "~/.config/funstation/Brewfile"
-  - type: BitwardenSecrets
+  - name: bitwarden
+    type: BitwardenSecrets
     params:
       syncIntervalDays: 7
