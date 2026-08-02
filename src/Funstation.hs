@@ -49,10 +49,11 @@ import System.Exit (exitFailure)
 -- workstation (e.g. the default @"workstation"@) — run the whole registry in file order.
 resolvePropertiesFor :: Configuration -> WorkstationName -> Either Text [Property]
 resolvePropertiesFor cfg ws =
-  case findWorkstation ws cfg.workstations of
+  case findWorkstation cfg.workstations of
     Just (Workstation { use = Just names }) -> traverse resolveName names
     _ -> Right runAll
  where
+  findWorkstation = find (\w -> w.name == ws)
   runAll = map property cfg.properties
   registry = buildRegistry cfg.properties
   resolveName n =
@@ -60,12 +61,7 @@ resolvePropertiesFor cfg ws =
       Just p  -> Right p
       Nothing -> Left $ unknownPropertyError n (Map.keys registry)
 
--- | Find a workstation by its resolved name.
-findWorkstation :: WorkstationName -> [Workstation] -> Maybe Workstation
-findWorkstation nm = find (\w -> w.name == nm)
-
--- | A name→property lookup over the named registry entries. Unnamed entries are
--- dropped (they can only run under the run-all default).
+-- | A name→property lookup over the named registry entries.
 buildRegistry :: [NamedProperty] -> Map.Map PropertyName Property
 buildRegistry = Map.fromList . mapMaybe namedEntry
  where
