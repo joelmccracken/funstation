@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
 module ConfigurationSpec (spec) where
 
@@ -17,8 +18,8 @@ import Funstation
 sampleYaml :: ByteString
 sampleYaml = [r|
 workstations:
-  - workstationName: glamdring
-  - workstationName: nixbox
+  - name: glamdring
+  - name: nixbox
     use: [home-dotfiles, bitwarden]
 properties:
   - name: home-dotfiles
@@ -40,12 +41,12 @@ spec :: Spec
 spec = describe "ConfigurationSpec" $ do
   it "parses workstation names and optional use lists" $ do
     cfg <- decodeThrow sampleYaml :: IO Configuration
-    map workstationName (workstations cfg) `shouldBe` ["glamdring", "nixbox"]
+    map (.name) (workstations cfg) `shouldBe` ["glamdring", "nixbox"]
     map use (workstations cfg) `shouldBe` [Nothing, Just ["home-dotfiles", "bitwarden"]]
 
   it "parses optional names on registry entries" $ do
     cfg <- decodeThrow sampleYaml :: IO Configuration
-    map name (properties cfg) `shouldBe` [Just "home-dotfiles", Nothing, Just "bitwarden"]
+    map (.name) (properties cfg) `shouldBe` [Just "home-dotfiles", Nothing, Just "bitwarden"]
 
   it "decodes the same object as a Property (type/params) alongside the name" $ do
     cfg <- decodeThrow sampleYaml :: IO Configuration

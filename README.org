@@ -32,7 +32,7 @@ system set up currently
 
 #+begin_src yaml
 workstations:
-  - workstationName: "aeglos"
+  - name: "aeglos"
 properties:
   - type: GitHomeDir
     params:

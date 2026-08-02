@@ -62,7 +62,7 @@ resolvePropertiesFor cfg ws =
 
 -- | Find a workstation by its resolved name.
 findWorkstation :: WorkstationName -> [Workstation] -> Maybe Workstation
-findWorkstation nm = find (\w -> w.workstationName == nm)
+findWorkstation nm = find (\w -> w.name == nm)
 
 -- | A name→property lookup over the named registry entries. Unnamed entries are
 -- dropped (they can only run under the run-all default).
@@ -217,7 +217,7 @@ resolveWorkstationName cfg cliName savedName =
         [single] -> Right (FromDefault single)
         _ -> Left "multiple workstations are defined; specify one with --workstation"
  where
-  configNames = workstationName <$> cfg.workstations
+  configNames = (.name) <$> cfg.workstations
   known = knownWorkstations configNames
   validate src rawName
     | wn `elem` known = Right wn

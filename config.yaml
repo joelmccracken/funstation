@@ -1,8 +1,8 @@
 workstations:
   # No `use:` -> runs the entire registry, in file order (unchanged behavior).
-  - workstationName: "glamdring"
+  - name: "glamdring"
   # NixOS box: selects a subset by name, omitting NixDaemon and HomebrewBundle.
-  - workstationName: "nixbox"
+  - name: "nixbox"
     use: [home-dotfiles, home-manager, bitwarden]
 properties:
   - name: home-dotfiles

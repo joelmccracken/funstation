@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DeriveAnyClass    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module Funstation.Configuration where
 
@@ -56,7 +57,7 @@ instance FromJSON NamedProperty where
     NamedProperty <$> o .:? "name" <*> parseJSON (Object o)
 
 data Workstation = Workstation
-  { workstationName :: WorkstationName
+  { name :: WorkstationName
   , use :: Maybe [PropertyName]  -- ^ Names of registry entries to run, in order; 'Nothing' runs all
   } deriving (Generic, Show, FromJSON)
 
