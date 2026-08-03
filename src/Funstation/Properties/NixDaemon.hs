@@ -7,6 +7,7 @@
 module Funstation.Properties.NixDaemon where
 
 import Control.Monad.Except (throwError)
+import Control.Monad.Reader (asks)
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -35,14 +36,20 @@ instance Prop NixDaemonP where
   desc _ = "Nix package manager (daemon mode)"
   attrs _ = mempty
   checker p = do
-    nixInstalled <- hasCmd' "nix"
-    if not nixInstalled
-      then return False
-      else case p.nixConf of
-        Nothing -> return True  -- No config specified, nix installed = good
-        Just desiredConf -> do
-          let nixConfPath = "/etc/nix/nix.conf"
-          fileContentsCheck nixConfPath desiredConf
+    os <- asks (.os)
+    case os of
+      -- On NixOS, there is nothing for this property to do, so it is
+      -- always considered fulfilled.
+      NixOS -> return True
+      _ -> do
+        nixInstalled <- hasCmd' "nix"
+        if not nixInstalled
+          then return False
+          else case p.nixConf of
+            Nothing -> return True  -- No config specified, nothing else to do
+            Just desiredConf -> do
+              let nixConfPath = "/etc/nix/nix.conf"
+              fileContentsCheck nixConfPath desiredConf
   fixer p = do
     -- Check if Nix is already installed
     nixInstalled <- hasCmd' "nix"
