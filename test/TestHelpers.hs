@@ -72,3 +72,9 @@ shouldBeM :: (Show a, Eq a) => a -> IO a -> Expectation
 shouldBeM expected op = do
   res <- op
   res `shouldBe` expected
+
+-- | Run a monadic action and assert its result satisfies the given predicate.
+shouldSatisfyM :: Show a => (a -> Bool) -> IO a -> Expectation
+shouldSatisfyM p op = do
+  res <- op
+  res `shouldSatisfy` p
