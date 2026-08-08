@@ -51,6 +51,10 @@ instance Prop NixDaemonP where
               let nixConfPath = "/etc/nix/nix.conf"
               fileContentsCheck nixConfPath desiredConf
   fixer p = do
+    os <- asks (.os)
+    when (os == NixOS) $
+      throwError $ WSFailure "Nix is managed declaratively on NixOS; this property should never run its fixer here"
+
     -- Check if Nix is already installed
     nixInstalled <- hasCmd' "nix"
 
