@@ -51,7 +51,7 @@ data Options = Options
   , sudoPassFile :: Maybe Text  -- ^ Optional path to file containing sudo password
   , verbose :: Bool  -- ^ If True, print each command before running it
   , interactive :: Bool  -- ^ If True, prompt user before each command
-  , configPath :: FilePath -- ^ Path to configuration file, needed if not in default location
+  , configPath :: Maybe FilePath -- ^ Path to configuration file from the CLI; when 'Nothing', the default location is used (see 'resolveConfigPath')
   , workstation :: Maybe Text -- ^ Raw workstation name from the CLI, if provided; resolved into 'Settings.workstation'
   }
   deriving (Show)

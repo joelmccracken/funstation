@@ -23,7 +23,7 @@ withTempDir = withSystemTempDirectory
 -- | Build a minimal Settings for tests, parameterised by sudoCmd and detected OS.
 mkSettings :: String -> OS -> Settings
 mkSettings sc o =
-  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = "", workstation = Nothing }
+  let opts = Options { command = Bootstrap, sudoCache = False, sudoPassFile = Nothing, verbose = False, interactive = False, configPath = Nothing, workstation = Nothing }
   in Settings { opts = opts, sudoCmd = sc, workstation = "workstation", os = o }
 
 -- | Run a WS action with a minimal configuration.

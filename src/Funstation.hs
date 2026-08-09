@@ -131,11 +131,11 @@ optionsParser = Options
      <> short 'i'
      <> help "Prompt before each command; implies --verbose"
       )
-  <*> strOption
+  <*> optional (strOption
       ( long "config"
      <> metavar "CONFIG_FILE"
-     <> help "Path to the configuration YAML file"
-      )
+     <> help "Path to the configuration YAML file (default: ~/.config/funstation/config.yaml)"
+      ))
   <*> optional (T.pack <$> strOption
       ( long "workstation"
      <> metavar "WORKSTATION"
@@ -273,11 +273,21 @@ ensureProperty prop = do
 
       put $ wsstate { props = Set.insert (IsProp prop) seen}
 
+-- | Resolve the configuration file path. Uses @--config@ when given, otherwise
+-- the default location @~/.config/funstation/config.yaml@. The result is passed
+-- through 'expandPath' so a leading @~@/@$HOME@ (in either source) is expanded.
+resolveConfigPath :: MonadIO m => Maybe FilePath -> m FilePath
+resolveConfigPath given =
+  T.unpack <$> expandPath (T.pack (fromMaybe defaultConfigPath given))
+  where
+    defaultConfigPath = "~/.config/funstation/config.yaml"
+
 main :: IO ()
 main = do
   opts <- parseOptions
 
-  cfg <- decodeFileThrow opts.configPath :: IO Configuration
+  configPath <- resolveConfigPath opts.configPath
+  cfg <- decodeFileThrow configPath :: IO Configuration
   ws <- resolveWorkstation cfg opts
 
   os <- failLeft =<< runExceptT detectOS
