@@ -50,8 +50,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns False for symlink pointing to wrong target" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -68,8 +67,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns False for missing symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -83,8 +81,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns True for correct copy" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -99,8 +96,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns False for copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -115,8 +111,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns False for symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -131,8 +126,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns True for correct directory copy" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcSubDir = srcDir </> "subdir"
@@ -147,8 +141,7 @@ spec = do
               , sort = Copy
               , dir = True
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
 
       it "returns False for directory copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcSubDir = srcDir </> "subdir"
@@ -164,8 +157,7 @@ spec = do
               , sort = Copy
               , dir = True
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcSubDir) (T.pack destSubDir)
 
     describe "DotfilesP checker" $ do
       it "returns True when all dotfiles are correct" $ withTempSrcAndDest $ \srcPath destPath -> do
@@ -186,8 +178,7 @@ spec = do
                   , DotfileConfig { src = "file2", dest = Nothing, dot = False, sort = Copy, dir = False }
                   ]
               }
-        result <- runWS $ checker dotfilesP
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checker dotfilesP
 
       it "returns False when a dotfile is incorrect" $ withTempSrcAndDest $ \srcPath destPath -> do
         let srcFile1 = srcPath </> "file1"
@@ -202,8 +193,7 @@ spec = do
                   [ DotfileConfig { src = "file1", dest = Nothing, dot = False, sort = Copy, dir = False }
                   ]
               }
-        result <- runWS $ checker dotfilesP
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checker dotfilesP
 
     describe "dest field handling" $ do
       it "uses absolute dest path directly without prepending destDir" $ withTempSrcAndDest $ \srcPath destPath -> do
@@ -225,8 +215,7 @@ spec = do
                       }
                   ]
               }
-        result <- runWS $ checker dotfilesP
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checker dotfilesP
 
       it "prepends destDir to relative dest path" $ withTempSrcAndDest $ \srcPath destPath -> do
         let srcFile = srcPath </> "file1"
@@ -247,8 +236,7 @@ spec = do
                       }
                   ]
               }
-        result <- runWS $ checker dotfilesP
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checker dotfilesP
 
       it "ignores dot prefix when dest is explicit" $ withTempSrcAndDest $ \srcPath destPath -> do
         let srcFile = srcPath </> "file1"
@@ -269,8 +257,7 @@ spec = do
                       }
                   ]
               }
-        result <- runWS $ checker dotfilesP
-        result `shouldBe` True
+        shouldBeM True $ runWS $ checker dotfilesP
 
     describe "expandPath" $ do
       it "expands tilde to home directory" $ do
@@ -284,8 +271,7 @@ spec = do
         result `shouldSatisfy` T.isSuffixOf "/foo/bar"
 
       it "leaves absolute paths unchanged" $ do
-        result <- runWS $ expandPath "/usr/local/bin"
-        result `shouldBe` "/usr/local/bin"
+        shouldBeM "/usr/local/bin" $ runWS $ expandPath "/usr/local/bin"
 
       it "expands $HOME to home directory" $ do
         result <- runWS $ expandPath "$HOME"
@@ -305,10 +291,8 @@ spec = do
         createSymbolicLink srcFile destFile
         removeFile srcFile
 
-        isLink <- pathIsSymbolicLink destFile
-        exists <- doesPathExist destFile
-        isLink `shouldBe` True
-        exists `shouldBe` False
+        shouldBeM True $ pathIsSymbolicLink destFile
+        shouldBeM False $ doesPathExist destFile
 
     describe "mode switching" $ do
       it "detects symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -324,8 +308,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
       it "detects regular file when Symlink mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -340,8 +323,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` False
+        shouldBeM False $ runWS $ checkSingleDotfile cfg (T.pack srcFile) (T.pack destFile)
 
     describe "computeDotfileDiff" $ do
       it "returns DotfileCorrect for correct symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
@@ -357,8 +339,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileCorrect
+        shouldBeM DotfileCorrect $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileCorrect for correct copy" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -373,8 +354,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileCorrect
+        shouldBeM DotfileCorrect $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileMissing when destination doesn't exist" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -388,8 +368,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileMissing
+        shouldBeM DotfileMissing $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileBrokenSymlink for broken symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -407,8 +386,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileBrokenSymlink
+        shouldBeM DotfileBrokenSymlink $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileWrong for symlink pointing to wrong target" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -425,8 +403,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileWrong
+        shouldBeM DotfileWrong $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileWrong for copy with different content" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -441,8 +418,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileWrong
+        shouldBeM DotfileWrong $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileWrong for symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -457,8 +433,7 @@ spec = do
               , sort = Copy
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileWrong
+        shouldBeM DotfileWrong $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "returns DotfileSrcMissing when source doesn't exist" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "nonexistent"
@@ -471,8 +446,7 @@ spec = do
               , sort = Symlink
               , dir = False
               }
-        result <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        result `shouldBe` DotfileSrcMissing (T.pack srcFile)
+        shouldBeM (DotfileSrcMissing (T.pack srcFile)) $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
     describe "computeDotfilePaths" $ do
       it "computes correct paths with default destDir" $ do
@@ -559,10 +533,8 @@ spec = do
               }
         runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileMissing
 
-        exists <- doesPathExist destFile
-        exists `shouldBe` True
-        isLink <- pathIsSymbolicLink destFile
-        isLink `shouldBe` True
+        shouldBeM True $ doesPathExist destFile
+        shouldBeM True $ pathIsSymbolicLink destFile
 
       it "creates copy for DotfileMissing with Copy mode" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -578,12 +550,9 @@ spec = do
               }
         runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileMissing
 
-        exists <- doesPathExist destFile
-        exists `shouldBe` True
-        isLink <- pathIsSymbolicLink destFile
-        isLink `shouldBe` False
-        content <- readFile destFile
-        content `shouldBe` "content"
+        shouldBeM True $ doesPathExist destFile
+        shouldBeM False $ pathIsSymbolicLink destFile
+        shouldBeM "content" $ readFile destFile
 
       it "removes broken symlink and creates new one for DotfileBrokenSymlink" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -603,13 +572,10 @@ spec = do
               }
         runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileBrokenSymlink
 
-        exists <- doesPathExist destFile
-        exists `shouldBe` True
-        isLink <- pathIsSymbolicLink destFile
-        isLink `shouldBe` True
+        shouldBeM True $ doesPathExist destFile
+        shouldBeM True $ pathIsSymbolicLink destFile
         -- Verify it points to the right target now
-        diffResult <- runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
-        diffResult `shouldBe` DotfileCorrect
+        shouldBeM DotfileCorrect $ runWS $ computeDotfileDiff cfg (T.pack srcFile) (T.pack destFile)
 
       it "backs up wrong file and creates new one for DotfileWrong" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
@@ -627,10 +593,8 @@ spec = do
         runWS $ applyDotfileFix cfg (T.pack srcFile) (T.pack destFile) DotfileWrong
 
         -- Original dest should now be correct
-        exists <- doesPathExist destFile
-        exists `shouldBe` True
-        isLink <- pathIsSymbolicLink destFile
-        isLink `shouldBe` True
+        shouldBeM True $ doesPathExist destFile
+        shouldBeM True $ pathIsSymbolicLink destFile
 
         -- A backup file should exist
         backupFiles <- listDirectory destDir
