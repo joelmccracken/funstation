@@ -7,14 +7,25 @@ name: E2E
 on:
   push:
     branches: [master]
+  # PRs run only when labeled `e2e` (see the `if:` on the jobs below). The
+  # `labeled` type means applying the label triggers a run without a re-push.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
   build:
+    # Always on master/dispatch; on PRs only when the `e2e` label is present.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
     uses: ./.github/workflows/build.yml
 
   e2e:
     name: E2E (${{ matrix.ws }})
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
     needs: [build]
     runs-on: ${{ matrix.os }}
     strategy:
