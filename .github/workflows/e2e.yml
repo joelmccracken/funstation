@@ -1,0 +1,92 @@
+name: E2E
+
+# Full-stack end-to-end test: build the real static `fun` artifact, then on a
+# fresh runner run it through a bootstrap and assert the system actually
+# converged. Runs on master pushes only (PRs keep the fast unit-test ci.yml),
+# so the 3-runner nix build cost is paid only on master.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  e2e:
+    name: E2E (${{ matrix.ws }})
+    needs: [build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: x86_64-linux
+            ws: ci-linux
+          - os: macos-14
+            triple: aarch64-darwin
+            ws: ci-macos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download fun binary
+        uses: actions/download-artifact@v4
+        with:
+          name: funstation-${{ matrix.triple }}
+
+      - name: Make fun executable
+        run: |
+          cp funstation-${{ matrix.triple }} fun
+          chmod +x fun
+          ./fun --help
+
+      - name: Generate hermetic GitHomeDir source repo + fixtures
+        run: bash test/ci/setup-src-repo.sh
+
+      # Phase 1 ("base"): installs Nix from scratch, sets up GitHomeDir + Dotfiles.
+      # (Homebrew bundle is part of the macOS base list.)
+      - name: Bootstrap - base (first run)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-base --verbose bootstrap 2>&1 | tee run1-base.log
+
+      # `fun`'s child shells don't source /etc/profile, so the Nix it just
+      # installed isn't on PATH within that run. Put it on PATH for later steps.
+      - name: Put freshly-installed Nix on PATH
+        run: echo "/nix/var/nix/profiles/default/bin" >> "$GITHUB_PATH"
+
+      # Phase 2 ("hm"): home-manager, now that `nix` is available.
+      - name: Bootstrap - home-manager (first run)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-hm --verbose bootstrap 2>&1 | tee run1-hm.log
+
+      - name: Verify system state
+        run: bash test/ci/verify.sh
+
+      - name: Bootstrap - base (second run, idempotency)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-base --verbose bootstrap 2>&1 | tee run2-base.log
+
+      - name: Bootstrap - home-manager (second run, idempotency)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-hm --verbose bootstrap 2>&1 | tee run2-hm.log
+
+      - name: Assert idempotency (no fixes applied on second run)
+        run: |
+          fail=0
+          for log in run2-base.log run2-hm.log; do
+            if grep -q "Invalid, applying fix" "$log"; then
+              echo "ERROR: second bootstrap applied fixes in $log; not idempotent:"
+              grep -n "Invalid, applying fix" "$log" || true
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "Idempotent: no fixes applied on second run."
+
+      - name: Upload run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ matrix.ws }}
+          path: |
+            run1-base.log
+            run1-hm.log
+            run2-base.log
+            run2-hm.log
