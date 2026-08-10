@@ -136,7 +136,7 @@ test-suite funstation-test
 
     -- Spec modules are discovered automatically by hspec-discover (see Main.hs),
     -- but a plain .cabal file still needs each one listed here to compile/package it.
-    other-modules:    SudoSpec, WorkstationSpec, UtilsSpec, TestHelpers,
+    other-modules:    SudoSpec, WorkstationSpec, UtilsSpec, CommandsSpec, TestHelpers,
                       ConfigurationSpec, PropertySelectionSpec,
                       Properties.GitHomeDirSpec, Properties.GitCloneSpec, Properties.DotfilesSpec,
                       Properties.HasGitSpec

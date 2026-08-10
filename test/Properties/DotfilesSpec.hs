@@ -217,41 +217,6 @@ spec = do
               }
         shouldBeM True $ runWS $ checker dotfilesP
 
-    describe "expandPath" $ do
-      it "expands tilde to home directory" $ do
-        result <- runWS $ expandPath "~"
-        result `shouldSatisfy` T.isPrefixOf "/"
-        result `shouldSatisfy` (not . T.isInfixOf "~")
-
-      it "expands tilde in path" $ do
-        result <- runWS $ expandPath "~/foo/bar"
-        result `shouldSatisfy` T.isPrefixOf "/"
-        result `shouldSatisfy` T.isSuffixOf "/foo/bar"
-
-      it "leaves absolute paths unchanged" $ do
-        shouldBeM "/usr/local/bin" $ runWS $ expandPath "/usr/local/bin"
-
-      it "expands $HOME to home directory" $ do
-        result <- runWS $ expandPath "$HOME"
-        result `shouldSatisfy` T.isPrefixOf "/"
-        result `shouldSatisfy` (not . T.isInfixOf "$")
-
-      it "expands $HOME in path" $ do
-        result <- runWS $ expandPath "$HOME/foo/bar"
-        result `shouldSatisfy` T.isPrefixOf "/"
-        result `shouldSatisfy` T.isSuffixOf "/foo/bar"
-
-    describe "broken symlink handling" $ do
-      it "detects broken symlink" $ withTempSrcAndDest $ \srcDir destDir -> do
-        let srcFile = srcDir </> "testfile"
-        let destFile = destDir </> "testfile"
-        createTestFile srcFile "content"
-        createSymbolicLink srcFile destFile
-        removeFile srcFile
-
-        shouldBeM True $ pathIsSymbolicLink destFile
-        shouldBeM False $ doesPathExist destFile
-
     describe "mode switching" $ do
       it "detects symlink when Copy mode expected" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
