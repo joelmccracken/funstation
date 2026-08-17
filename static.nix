@@ -1,16 +1,5 @@
 { self, system, nixpkgs, haskellNix, compiler-nix-name, ... }:
   let
-    interpForSystem = sys:
-      let s = {
-            "i686-linux" = "/lib/ld-linux.so.2";
-            "x86_64-linux" = "/lib64/ld-linux-x86-64.so.2";
-            "aarch64-linux" = "/lib/ld-linux-aarch64.so.1";
-            "armv7l-linux" = "/lib/ld-linux-armhf.so.3";
-            "armv7a-linux" = "/lib/ld-linux-armhf.so.3";
-          };
-      in
-        s.${sys} or (builtins.abort "Unsupported system ${sys}. Supported systems are: ${builtins.concatStringsSep ", " (builtins.attrNames s)}.");
-
    fixup-nix-deps-overlay = final: prev: {
      fixup-nix-deps = final.writeShellApplication {
        name = "fixup-nix-deps";
@@ -32,15 +21,22 @@
    };
 
    staticish-overlay = final: prev: {
+     # `drv` may be cross (w/ musl64), so every tool used to prepare
+     # it has to come from the builder pkgs, not target.
+     # CF haskell.nix's `asZip`, which takes its tools from
+     # `buildPackages` for the same reason.
      make-staticish = {name, drv, exe}:
        let
-         name = "funstation-staticsh";
-         pkgs = final;
-         targetPlatform = drv.stdenv.targetPlatform;
+         nativePkgs = final.buildPackages;
+         lib = nativePkgs.lib;
+         hostPlatform = drv.stdenv.hostPlatform;
        in
-         pkgs.stdenv.mkDerivation {
+         nativePkgs.stdenv.mkDerivation {
            inherit name;
-           buildInputs = [ pkgs.patchelf pkgs.fixup-nix-deps ];
+
+           nativeBuildInputs =
+             lib.optionals hostPlatform.isLinux [ nativePkgs.binutils ]
+             ++ lib.optionals hostPlatform.isDarwin [ nativePkgs.fixup-nix-deps ];
 
            phases = [ "buildPhase" "checkPhase" "installPhase" ];
 
@@ -49,7 +45,7 @@
              bin=$out/bin/${exe}
              cp "${drv.out}/bin/${exe}" $bin
            ''
-           + pkgs.lib.optionalString (targetPlatform.isDarwin) ''
+           + lib.optionalString hostPlatform.isDarwin ''
              mode=$(stat -c%a $bin)
              chmod +w $bin
              fixup-nix-deps $bin
@@ -58,29 +54,33 @@
 
            doCheck = true;
 
-           checkPhase = pkgs.lib.optionalString (targetPlatform.isLinux && targetPlatform.isGnu) ''
+           # On musl binary is fully static, so ensure no PT_INTERP segment, no
+           # DT_NEEDED entries.
+           # not grepping for /nix/store — a static GHC binary has store paths in string data.
+           checkPhase = lib.optionalString (hostPlatform.isLinux && hostPlatform.isMusl) ''
              bin=$out/bin/${exe}
-             cd $out/bin
-             if ldd $bin |grep nix\/store; then
-                 echo "ERROR: $bin still depends on nix store"
+             readelf -l "$bin" > prog-headers.txt
+             readelf -d "$bin" > dyn-section.txt
+             if grep -q INTERP prog-headers.txt; then
+                 echo "ERROR: $bin has a PT_INTERP segment; it is not static"
                  exit 1
              fi
-           '' + pkgs.lib.optionalString (targetPlatform.isDarwin) ''
-             if otool -L ${exe} in |grep nix\/store; then
-                 echo "ERROR: $bin still depends on nix store $(otool -L ${exe})"
+             if grep -q NEEDED dyn-section.txt; then
+                 echo "ERROR: $bin has dynamic NEEDED entries"
+                 exit 1
+             fi
+           '' + lib.optionalString hostPlatform.isDarwin ''
+             bin=$out/bin/${exe}
+             # otool first line is the binary's own path, which is a
+             # store path — ignore it
+             otool -L "$bin" > libs.txt
+             if tail -n +2 libs.txt | grep nix\/store; then
+                 echo "ERROR: $bin still depends on nix store $(cat libs.txt)"
                  exit 1
              fi
            '';
          };
    };
-
-   # systems = [
-   #   # "x86_64-linux"
-   #   "x86_64-darwin"
-   #   # "aarch64-linux"
-   #   # "aarch64-darwin"
-   # ];
-
 
    static-gmp-overlay = final: prev: {
      static-gmp = (final.gmp.override { withStatic = true; }).overrideDerivation (old: {
@@ -104,16 +104,18 @@
      ];
    };
 
-   # # keep it simple (from https://ayats.org/blog/no-flake-utils/)
-   # forAllSystems = f:
-   #   nixpkgs.lib.genAttrs systems (system: f system );
-
    project = pkgs:
      let
        add-static-libs-to-darwin = pkgs.lib.mkIf pkgs.hostPlatform.isDarwin {
          packages.funstation.ghcOptions = [
            "-L${pkgs.lib.getLib pkgs.static-gmp}/lib"
          ];
+       };
+
+       # dontStrip defaults to true, so without this the release artifact
+       # carries full debug info.
+       strip-exe = {
+         packages.funstation.components.exes.fun.dontStrip = false;
        };
 
        static-nix-tools-project = pkgs.haskell-nix.project' {
@@ -126,14 +128,20 @@
 
          modules = [
            add-static-libs-to-darwin
+           strip-exe
          ];
        };
      in
        static-nix-tools-project;
+
    pkgs = mkNixpkgsForSystem system;
+
+   buildPkgs = if pkgs.stdenv.hostPlatform.isLinux
+               then pkgs.pkgsCross.musl64
+               else pkgs;
  in
      pkgs.make-staticish {
            name = "funstation-static";
-           drv = (project pkgs).flake'.packages."funstation:exe:fun";
+           drv = (project buildPkgs).flake'.packages."funstation:exe:fun";
            exe = "fun";
      }

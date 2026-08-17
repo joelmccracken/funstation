@@ -1,16 +1,24 @@
 {
   description = "A very basic flake";
+
+  # master, cached
   inputs.haskellNix.url = "github:input-output-hk/haskell.nix";
+
+  # version that still has x86_64-darwin support
+  inputs.haskellNixIntel.url = "github:input-output-hk/haskell.nix/aa6638e82fa4a2e3f791e4ccb70b250078c693ec";
   inputs.nixpkgs.follows = "haskellNix/nixpkgs-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
-  outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix }:
-    let
-      # compiler-nix-name = "ghc9122";
-      compiler-nix-name = "ghc9102";
-    in
+  outputs = inputs@{ self, nixpkgs, flake-utils, haskellNix, haskellNixIntel }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" ] (system:
         let
-          overlays = [ haskellNix.overlay
+          intel = system == "x86_64-darwin";
+          hn = if intel then haskellNixIntel else haskellNix;
+          nixpkgs' = if intel then haskellNixIntel.inputs.nixpkgs-unstable else nixpkgs;
+          # ghc9102 is available for darwin intel
+          # ghc9102 is cached cross compiler for musl on zw3rk
+          compiler-nix-name = if intel then "ghc9102" else "ghc9103";
+
+          overlays = [ hn.overlay
                        (final: _prev: {
                          # This overlay adds our project to pkgs
                          funstationProject =
@@ -28,14 +36,16 @@
                              shell.buildInputs = with pkgs; [
                                nixpkgs-fmt
                              ];
-                             # This adds `js-unknown-ghcjs-cabal` to the shell.
-                             # shell.crossPlatforms = p: [p.ghcjs];
                            };
                        })
                      ];
-      pkgs = import nixpkgs { inherit system overlays; inherit (haskellNix) config; };
+      pkgs = import nixpkgs' { inherit system overlays; inherit (hn) config; };
       flake = pkgs.funstationProject.flake {};
-      static = import ./static.nix { inherit self nixpkgs haskellNix system compiler-nix-name; };
+      static = import ./static.nix {
+        inherit self system compiler-nix-name;
+        nixpkgs = nixpkgs';
+        haskellNix = hn;
+      };
     in flake //
       {
         packages = flake.packages // { default = static; };
