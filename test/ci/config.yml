@@ -1,24 +1,9 @@
-# CI end-to-end config (see PLAN_ci_e2e.md and .github/workflows/e2e.yml).
-#
-# Split into two workstations per OS:
-#   *-base : nix-daemon, git-home-dir, dotfiles (+ brew on macOS) — installs Nix.
-#   *-hm   : home-manager — runs in a second `fun` invocation, after Nix is on PATH.
-#
-# Path handling notes:
-#   - gitDir/homeDir (GitHomeDir), srcDir/destDir (Dotfiles) and dir (HomeManager)
-#     go through expandPath, so they may use $HOME / $GITHUB_WORKSPACE.
-#   - remoteUrl (GitHomeDir) and brewfile (HomebrewBundle) are used raw, so they
-#     need literal absolute paths -> hence per-OS git-home-dir-* entries and the
-#     hosted-runner home dirs (/home/runner on Linux, /Users/runner on macOS).
 workstations:
-  - name: ci-linux-base
-    use: [nix-daemon, git-home-dir-linux, dotfiles]
-  - name: ci-linux-hm
-    use: [home-manager]
-  - name: ci-macos-base
-    use: [nix-daemon, git-home-dir-macos, dotfiles, brew-bundle]
-  - name: ci-macos-hm
-    use: [home-manager]
+  # home-manager runs via nix after nix installed
+  - name: ci-linux
+    use: [nix-daemon, git-home-dir, dotfiles, home-manager]
+  - name: ci-macos
+    use: [nix-daemon, git-home-dir, dotfiles, brew-bundle, home-manager]
 
 properties:
   - name: nix-daemon
@@ -33,19 +18,11 @@ properties:
         substituters = https://cache.nixos.org
         trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 
-  - name: git-home-dir-linux
+  - name: git-home-dir
     type: GitHomeDir
     params:
       gitDir: "$HOME/funstation-ci/git-dir"
-      remoteUrl: "/home/runner/funstation-ci/src"
-      branch: main
-      homeDir: "$HOME/funstation-ci/home"
-
-  - name: git-home-dir-macos
-    type: GitHomeDir
-    params:
-      gitDir: "$HOME/funstation-ci/git-dir"
-      remoteUrl: "/Users/runner/funstation-ci/src"
+      remoteUrl: "$HOME/funstation-ci/src"
       branch: main
       homeDir: "$HOME/funstation-ci/home"
 
@@ -72,4 +49,4 @@ properties:
   - name: brew-bundle
     type: HomebrewBundle
     params:
-      brewfile: "/Users/runner/funstation-ci/Brewfile"
+      brewfile: "$HOME/funstation-ci/Brewfile"

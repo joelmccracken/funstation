@@ -55,40 +55,22 @@ jobs:
       - name: Generate hermetic GitHomeDir source repo + fixtures
         run: bash test/ci/setup-src-repo.sh
 
-      # Phase 1 ("base"): installs Nix from scratch, sets up GitHomeDir + Dotfiles.
-      # (Homebrew bundle is part of the macOS base list.)
-      - name: Bootstrap - base (first run)
-        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-base --verbose bootstrap 2>&1 | tee run1-base.log
-
-      # `fun`'s child shells don't source /etc/profile, so the Nix it just
-      # installed isn't on PATH within that run. Put it on PATH for later steps.
-      - name: Put freshly-installed Nix on PATH
-        run: echo "/nix/var/nix/profiles/default/bin" >> "$GITHUB_PATH"
-
-      # Phase 2 ("hm"): home-manager, now that `nix` is available.
-      - name: Bootstrap - home-manager (first run)
-        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-hm --verbose bootstrap 2>&1 | tee run1-hm.log
+      - name: Bootstrap (first run)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }} --verbose bootstrap 2>&1 | tee run1.log
 
       - name: Verify system state
         run: bash test/ci/verify.sh
 
-      - name: Bootstrap - base (second run, idempotency)
-        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-base --verbose bootstrap 2>&1 | tee run2-base.log
-
-      - name: Bootstrap - home-manager (second run, idempotency)
-        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }}-hm --verbose bootstrap 2>&1 | tee run2-hm.log
+      - name: Bootstrap (second run, idempotency)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }} --verbose bootstrap 2>&1 | tee run2.log
 
       - name: Assert idempotency (no fixes applied on second run)
         run: |
-          fail=0
-          for log in run2-base.log run2-hm.log; do
-            if grep -q "Invalid, applying fix" "$log"; then
-              echo "ERROR: second bootstrap applied fixes in $log; not idempotent:"
-              grep -n "Invalid, applying fix" "$log" || true
-              fail=1
-            fi
-          done
-          if [ "$fail" -ne 0 ]; then exit 1; fi
+          if grep -q "Invalid, applying fix" run2.log; then
+            echo "ERROR: second bootstrap applied fixes; not idempotent:"
+            grep -n "Invalid, applying fix" run2.log || true
+            exit 1
+          fi
           echo "Idempotent: no fixes applied on second run."
 
       - name: Upload run logs
@@ -97,7 +79,5 @@ jobs:
         with:
           name: e2e-logs-${{ matrix.ws }}
           path: |
-            run1-base.log
-            run1-hm.log
-            run2-base.log
-            run2-hm.log
+            run1.log
+            run2.log

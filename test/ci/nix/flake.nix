@@ -23,11 +23,11 @@
         };
     in {
       homeConfigurations = {
-        "runner@ci-linux-hm" = mkHome {
+        "runner@ci-linux" = mkHome {
           system = "x86_64-linux";
           homeDirectory = "/home/runner";
         };
-        "runner@ci-macos-hm" = mkHome {
+        "runner@ci-macos" = mkHome {
           system = "aarch64-darwin";
           homeDirectory = "/Users/runner";
         };

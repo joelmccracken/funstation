@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Verify that `fun bootstrap` actually converged the system to test/ci/config.yml.
-# Accumulates failures and prints a single report; exits non-zero if anything
-# didn't converge. Run from the repo root, after both bootstrap phases.
+# Run from the repo root, after the bootstrap.
 set -uo pipefail
 
 BASE="$HOME/funstation-ci"
@@ -12,6 +11,19 @@ case "$(uname -s)" in
   Darwin) IS_MAC=1 ;;
   *)      IS_MAC=0 ;;
 esac
+
+# GitHub run: steps are non-login shells, so nix not on PATH yet
+# Source daemon profile so nix stuff can be found
+# Relax `-u` since the profile scripts touch unset vars.
+set +u
+for profile in \
+  /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+  /etc/profile.d/nix.sh; do
+  # shellcheck disable=SC1090
+  [ -e "$profile" ] && . "$profile"
+done
+set -u
+[ -d "$HOME/.nix-profile/bin" ] && PATH="$HOME/.nix-profile/bin:$PATH"
 
 FAILS=0
 pass() { echo "  ✓ $1"; }
