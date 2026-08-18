@@ -30,9 +30,12 @@ instance Prop HomebrewBundleP where
     brewInstalled <- hasCmd' "brew"
     if not brewInstalled
       then return False
-      else isRight <$> cmd (exe "brew" "bundle" "check" "--no-upgrade" ("--file=" <> T.unpack p.brewfile) &> devNull)
+      else do
+        expandedBrewfile <- expandPath p.brewfile
+        isRight <$> cmd (exe "brew" "bundle" "check" "--no-upgrade" ("--file=" <> T.unpack expandedBrewfile) &> devNull)
   fixer p = do
-    result <- runCmd ["brew", "bundle", "install", "--file=" <> p.brewfile] id
+    expandedBrewfile <- expandPath p.brewfile
+    result <- runCmd ["brew", "bundle", "install", "--file=" <> expandedBrewfile] id
     case result of
       Right _ -> putStrLn' "Homebrew bundle installed."
       Left err -> throwError $ WSFailure $ "brew bundle install failed: " <> tshow err
