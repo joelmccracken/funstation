@@ -379,6 +379,19 @@ spec = do
         shouldBeM False $ pathIsSymbolicLink destFile
         shouldBeM "content" $ readFile destFile
 
+      it "creates a missing destination directory instead of silently failing" $ withTempSrcAndDest $ \srcDir destDir -> do
+        let srcFile = srcDir </> "testfile"
+        -- Destination lives under nested dirs that do not exist yet.
+        let missingDir = destDir </> "does" </> "not" </> "exist"
+        let destFile = missingDir </> "testfile"
+        createTestFile srcFile "content"
+
+        shouldBeM False $ doesPathExist missingDir
+        runWS $ applyDotfileFix testDotfileConfig (T.pack srcFile) (T.pack destFile) DotfileMissing
+
+        shouldBeM True $ doesPathExist destFile
+        shouldBeM True $ pathIsSymbolicLink destFile
+
       it "removes broken symlink and creates new one for DotfileBrokenSymlink" $ withTempSrcAndDest $ \srcDir destDir -> do
         let srcFile = srcDir </> "testfile"
         let oldTarget = srcDir </> "oldtarget"
