@@ -20,7 +20,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Bool (bool)
 import Data.Either (isRight)
-import Control.Monad (void, forM_, forM)
+import Control.Monad (void, forM_, forM, unless)
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
 
@@ -87,10 +87,10 @@ getDestDir p = maybe "~/" ensureTrailingSlash p.destDir
   where
     ensureTrailingSlash t = if T.isSuffixOf "/" t then t else t <> "/"
 
--- | Compute the full destination path for a dotfile config.
--- If dest is set and is an absolute path (starts with /), use it directly.
--- If dest is set but relative, prepend baseDestDir (dot prefix is ignored).
--- If dest is not set, derive from src with optional dot prefix.
+-- | Compute the full path for a dotfile config.
+-- If dest is set and absolute, use directly.
+-- If dest is set and relative, prepend baseDestDir (ignore dot prefix).
+-- If dest is unset, derive from src with optional dot prefix.
 computeDestPath :: Text -> DotfileConfig -> Text
 computeDestPath baseDestDir f =
   case f.dest of
@@ -136,6 +136,10 @@ applyDotfileFix f src dest diff = do
       putStrLn' $ "Backing up existing file: " <> dest
       mvToBackup dest
     _ -> pure ()
+
+  -- Ensure the destination directory exists.
+  let parentDir = fst (T.breakOnEnd "/" dest)
+  unless (T.null parentDir) $ mkDir parentDir
 
   -- Create the dotfile (symlink or copy)
   case f.sort of

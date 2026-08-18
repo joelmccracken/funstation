@@ -14,6 +14,7 @@ import Shh (exe, captureTrim, (|>))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Aeson (eitherDecode, FromJSON)
+import Data.Either (isRight)
 import Control.Monad.Reader (MonadReader, ask)
 import Control.Monad.Except (MonadError)
 import Control.Monad.IO.Class (liftIO)
@@ -51,7 +52,9 @@ instance Prop HomeManagerP where
   attrs p = Map.fromList [("dir", p.dir)]
 
   checker p = do
-    hmInstalled <- hasCmd' "home-manager"
+    -- Detect executable through a login shell
+    -- (in case previous command modified login shell, e.g. PATH)
+    hmInstalled <- isRight <$> cmd (exe "bash" "-lc" "command -v home-manager" |> captureTrim)
     if not hmInstalled
       then return False
       else do
@@ -62,7 +65,7 @@ instance Prop HomeManagerP where
                     <> " && nix build --json --dry-run -v -L "
                     <> flakeOut
                     <> " --show-trace"
-        result <- cmd (exe "bash" "-c" (T.unpack buildCmd) |> captureTrim)
+        result <- cmd (exe "bash" "-lc" (T.unpack buildCmd) |> captureTrim)
         case result of
           Left _ -> return False
           Right jsonBytes ->
@@ -80,7 +83,8 @@ instance Prop HomeManagerP where
     let runCmd' = "cd " <> expandedDir
               <> " && nix -v -L --show-trace run "
               <> flakeOut
-    result <- runCmd ["bash", "-c", runCmd'] id
+    -- Login shell to pick up env changes
+    result <- runCmd ["bash", "-lc", runCmd'] id
     either
       (\err-> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err)
       (const $ putStrLn' "Home Manager configuration activated.")

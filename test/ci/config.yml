@@ -1,0 +1,52 @@
+workstations:
+  # home-manager runs via nix after nix installed
+  - name: ci-linux
+    use: [nix-daemon, git-home-dir, dotfiles, home-manager]
+  - name: ci-macos
+    use: [nix-daemon, git-home-dir, dotfiles, brew-bundle, home-manager]
+
+properties:
+  - name: nix-daemon
+    type: NixDaemon
+    params:
+      interactive: False
+      nixConf: |
+        # funstation-ci-marker
+        experimental-features = nix-command flakes
+        trusted-users = root runner
+        build-users-group = nixbld
+        substituters = https://cache.nixos.org
+        trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+  - name: git-home-dir
+    type: GitHomeDir
+    params:
+      gitDir: "$HOME/funstation-ci/git-dir"
+      remoteUrl: "$HOME/funstation-ci/src"
+      branch: main
+      homeDir: "$HOME/funstation-ci/home"
+
+  - name: dotfiles
+    type: Dotfiles
+    params:
+      srcDir: "$GITHUB_WORKSPACE/test/ci/fixtures/dotfiles"
+      destDir: "$HOME/funstation-ci/dotfiles-dest"
+      files:
+        - src: bashrc
+          dot: true
+          sort: Symlink
+          dir: false
+        - src: vimrc
+          dot: true
+          sort: Copy
+          dir: false
+
+  - name: home-manager
+    type: HomeManager
+    params:
+      dir: "$GITHUB_WORKSPACE/test/ci/nix"
+
+  - name: brew-bundle
+    type: HomebrewBundle
+    params:
+      brewfile: "$HOME/funstation-ci/Brewfile"

@@ -1,0 +1,83 @@
+name: E2E
+
+# Full-stack end-to-end test: build the real static `fun` artifact, then on a
+# fresh runner run it through a bootstrap and assert the system actually
+# converged. Runs on master pushes only (PRs keep the fast unit-test ci.yml),
+# so the 3-runner nix build cost is paid only on master.
+on:
+  push:
+    branches: [master]
+  # PRs run only when labeled `e2e` (see the `if:` on the jobs below). The
+  # `labeled` type means applying the label triggers a run without a re-push.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Always on master/dispatch; on PRs only when the `e2e` label is present.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
+    uses: ./.github/workflows/build.yml
+
+  e2e:
+    name: E2E (${{ matrix.ws }})
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e')
+    needs: [build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triple: x86_64-linux
+            ws: ci-linux
+          - os: macos-14
+            triple: aarch64-darwin
+            ws: ci-macos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download fun binary
+        uses: actions/download-artifact@v4
+        with:
+          name: funstation-${{ matrix.triple }}
+
+      - name: Make fun executable
+        run: |
+          cp funstation-${{ matrix.triple }} fun
+          chmod +x fun
+          ./fun --help
+
+      - name: Generate hermetic GitHomeDir source repo + fixtures
+        run: bash test/ci/setup-src-repo.sh
+
+      - name: Bootstrap (first run)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }} --verbose bootstrap 2>&1 | tee run1.log
+
+      - name: Verify system state
+        run: bash test/ci/verify.sh
+
+      - name: Bootstrap (second run, idempotency)
+        run: ./fun --config test/ci/config.yml --workstation ${{ matrix.ws }} --verbose bootstrap 2>&1 | tee run2.log
+
+      - name: Assert idempotency (no fixes applied on second run)
+        run: |
+          if grep -q "Invalid, applying fix" run2.log; then
+            echo "ERROR: second bootstrap applied fixes; not idempotent:"
+            grep -n "Invalid, applying fix" run2.log || true
+            exit 1
+          fi
+          echo "Idempotent: no fixes applied on second run."
+
+      - name: Upload run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ matrix.ws }}
+          path: |
+            run1.log
+            run2.log

@@ -1,0 +1,2 @@
+# funstation CI test bashrc (managed as a symlink)
+export FUNSTATION_CI=1

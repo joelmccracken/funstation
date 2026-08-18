@@ -1,0 +1,39 @@
+name: Build
+
+# Reusable workflow: build the statically-linked `fun` binary for each target
+# platform with Nix and upload it as an artifact named `funstation-<triple>`.
+# Called by both release.yml (to publish) and e2e.yml (to run + verify).
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build (${{ matrix.triple }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: x86_64-linux
+            runner: ubuntu-latest
+          - triple: x86_64-darwin
+            runner: macos-15-intel
+          - triple: aarch64-darwin
+            runner: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      # The static Linux nix build exhausts the ubuntu-latest disk without this.
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+      - uses: DeterminateSystems/nix-installer-action@v14
+      - name: Build
+        run: nix build --accept-flake-config
+      - name: Copy binary
+        run: cp result/bin/fun funstation-${{ matrix.triple }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: funstation-${{ matrix.triple }}
+          path: funstation-${{ matrix.triple }}

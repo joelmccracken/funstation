@@ -81,12 +81,13 @@ instance Prop GitHomeDirP where
   checker p = do
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
     expandedGitDir <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
+    expandedRemoteUrl <- expandPath p.remoteUrl
 
     -- 1. Git dir must exist
     gitDirExists <- dirExists expandedGitDir
     if not gitDirExists then pure False else do
       -- 2. Remote URL must match
-      hasRemote <- hasRemoteUrl expandedGitDir p.remoteUrl
+      hasRemote <- hasRemoteUrl expandedGitDir expandedRemoteUrl
       if not hasRemote then pure False else
         -- 3. All tracked files must be present in homeDir
         allTrackedFilesPresent expandedGitDir expandedHomeDir p.branch
@@ -108,6 +109,7 @@ instance Prop GitHomeDirP where
   fixer p = do
     expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
     expandedGitDir <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
+    expandedRemoteUrl <- expandPath p.remoteUrl
 
     gitDirExists <- dirExists expandedGitDir
 
@@ -128,15 +130,15 @@ instance Prop GitHomeDirP where
     -- Step 2: configure remote (add or update)
     remoteResult <- gitDirRemoteUrl expandedGitDir "origin"
     didSetRemoteUrl <- case remoteResult of
-      Right currentUrl | currentUrl == p.remoteUrl ->
+      Right currentUrl | currentUrl == expandedRemoteUrl ->
         pure False -- already correct
       Right _ -> do
         -- TODO this branch needs to be tested
-        void $ runCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "set-url", "origin", p.remoteUrl] id
+        void $ runCmd ["git", "--git-dir", expandedGitDir, "--work-tree", expandedHomeDir, "remote", "set-url", "origin", expandedRemoteUrl] id
         pure True
       Left _ -> do
         -- TODO ensure this branch tested
-        void $ runCmd ["git", "--git-dir", expandedGitDir, "remote", "add", "origin", p.remoteUrl] id
+        void $ runCmd ["git", "--git-dir", expandedGitDir, "remote", "add", "origin", expandedRemoteUrl] id
         pure True
 
     -- Step 3: fetch (always; errors out on failure)

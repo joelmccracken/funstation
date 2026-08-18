@@ -1,0 +1,2 @@
+# Tiny Brewfile for the CI HomebrewBundle property: one fast, cask-free formula.
+brew "hello"
