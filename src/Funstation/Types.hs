@@ -79,9 +79,14 @@ data NixSubcommand
   = NixRestart
   deriving (Show)
 
+data HomeManagerSubcommand
+  = HomeManagerRebuild
+  deriving (Show)
+
 data Command
   = Bootstrap
   | Nix NixSubcommand
+  | HomeManagerCmd HomeManagerSubcommand
   | Status
   deriving (Show)
 

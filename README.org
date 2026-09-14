@@ -68,6 +68,14 @@ on your system, run the bootstrap:
 #+begin_src sh
 fun --config config.yaml --workstation $YOUR_SYSTEM_NAME bootstrap
 #+end_src
+** Rebuilding home-manager
+To rebuild and activate just the home-manager configuration, without running a
+full bootstrap:
+#+begin_src sh
+fun home-manager rebuild
+#+end_src
+This builds and runs the activation script for the ~HomeManager~ property
+for the current workstation.
 * build, test, run
 ** from within a nix develop session
 run with

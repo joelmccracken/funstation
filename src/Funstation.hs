@@ -20,7 +20,7 @@ import Funstation.Properties.HomebrewBundle ()
 import Funstation.Properties.AptUpdate ()
 import Funstation.Properties.CoreDependencies
 import Funstation.Properties.NixDaemon ()
-import Funstation.Properties.HomeManager ()
+import Funstation.Properties.HomeManager (HomeManagerP)
 import Funstation.Properties.BitwardenSecrets ()
 
 import Options.Applicative
@@ -73,6 +73,9 @@ unknownPropertyError n known =
   "unknown property " <> unPropertyName n
     <> "; known properties: " <> T.intercalate ", " (unPropertyName <$> known)
 
+homeManagerProps :: [Property] -> [HomeManagerP]
+homeManagerProps props = [ p | HomeManager p <- props ]
+
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
 getProp (GitClone p) = IsProp p
@@ -93,6 +96,14 @@ nixSubcommandParser = subparser
     )
   )
 
+homeManagerSubcommandParser :: Parser HomeManagerSubcommand
+homeManagerSubcommandParser = subparser
+  ( App.command "rebuild"
+    ( info (pure HomeManagerRebuild <**> helper)
+      ( progDesc "Build and run the home-manager activation script" )
+    )
+  )
+
 commandParser :: Parser Command
 commandParser = subparser
   ( App.command "bootstrap"
@@ -102,6 +113,10 @@ commandParser = subparser
  <> App.command "nix"
     ( info (Nix <$> nixSubcommandParser <**> helper)
       ( progDesc "Nix package manager utilities" )
+    )
+ <> App.command "home-manager"
+    ( info (HomeManagerCmd <$> homeManagerSubcommandParser <**> helper)
+      ( progDesc "home-manager utilities" )
     )
  <> App.command "status"
     ( info (pure Status <**> helper)
@@ -300,6 +315,7 @@ main = do
   case opts.command of
     Bootstrap -> doBootstrap opts ws os cfg
     Nix NixRestart -> doNixRestart opts ws os
+    HomeManagerCmd HomeManagerRebuild -> doHomeManagerRebuild opts ws os cfg
     Status -> doStatus opts ws os cfg
 
   -- Clean up sudo refresh thread
@@ -336,6 +352,20 @@ main = do
     result <-
       runExceptT (runReaderT restartNixDaemon (settings opts ws os))
     failLeft result
+
+  -- Run the home-manager activation unconditionally: unlike bootstrap, a rebuild
+  -- skips the checker and always builds and runs the activation package.
+  doHomeManagerRebuild opts ws os cfg = do
+    props <- resolveProps ws cfg
+    case homeManagerProps props of
+      [] -> do
+        putStrLn $ "fun: error: no HomeManager property configured for workstation "
+                <> T.unpack (unWorkstationName ws)
+        exitFailure
+      hms -> do
+        result <-
+          runExceptT (runReaderT (forM_ hms fixer) (settings opts ws os))
+        failLeft result
 
   doStatus opts ws os cfg = do
     props <- resolveProps ws cfg
