@@ -15,6 +15,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except (ExceptT, MonadError)
+import Control.Monad.Catch (MonadThrow, MonadCatch, MonadMask)
 
 newtype WorkstationName = WorkstationName { unWorkstationName :: Text }
   deriving stock (Show)
@@ -34,7 +35,7 @@ data WSState =
 data WSError
   = WSFailure Text
   | WSAborted
-  deriving (Show)
+  deriving (Show, Eq)
 
 type WSStack a = ReaderT Settings (ExceptT WSError (StateT WSState IO)) a
 
@@ -68,6 +69,9 @@ newtype WS a
   , Functor
   , MonadIO
   , MonadError WSError
+  , MonadThrow
+  , MonadCatch
+  , MonadMask
   )
 
 -- Enum/command types
@@ -97,7 +101,7 @@ class Prop p where
   attrs :: p -> Map.Map Text Text
   -- checker: return true if property already fulfilled, false if fixer is required
   checker      :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => p -> m Bool
-  fixer        :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => p -> m ()
+  fixer        :: (MonadIO m, MonadMask m, MonadReader Settings m, MonadError WSError m) => p -> m ()
   dependencies :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => p -> m [IsProp]
 
 data IsProp where

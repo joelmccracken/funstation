@@ -9,6 +9,7 @@ import Funstation.Sudo
 import Funstation.Utility
 import Funstation.Types
 import Funstation.Commands
+import Funstation.State
 import Funstation.Proc
 import Funstation.Configuration
 import Funstation.Properties.Dotfiles
@@ -27,20 +28,19 @@ import Options.Applicative
 import Options.Applicative qualified as App
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.List (find)
 import Data.Yaml (decodeFileThrow)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
-import Control.Monad (forM_, void)
+import Control.Monad (forM_, void, mfilter)
 import Control.Concurrent (killThread)
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except (MonadError, runExceptT)
+import Control.Monad.Catch (MonadMask)
 import Data.Set (Set)
-import System.Directory (getHomeDirectory, doesFileExist, createDirectoryIfMissing)
-import System.FilePath (takeDirectory, (</>))
+import System.Directory (getHomeDirectory)
 import System.Exit (exitFailure)
 
 -- | Select the properties to run for a workstation. If the workstation declares a
@@ -166,29 +166,24 @@ parseOptions =
     )
 
 -- | Path to the file where the resolved workstation name is persisted, so other
--- tools can read it. Lives in the state dir, matching the BitwardenSecrets convention.
+-- tools can read it.
 workstationNameStateFile :: IO FilePath
 workstationNameStateFile = do
   home <- getHomeDirectory
-  pure $ home </> ".local" </> "state" </> "funstation" </> "workstationName"
+  pure $ stateFile home "workstationName"
 
 -- | Read the saved workstation name, if the state file exists and is non-empty.
 readWorkstationNameFromState :: IO (Maybe Text)
 readWorkstationNameFromState = do
   path <- workstationNameStateFile
-  exists <- doesFileExist path
-  if not exists
-    then pure Nothing
-    else do
-      contents <- T.strip <$> TIO.readFile path
-      pure $ if T.null contents then Nothing else Just contents
+  contents <- readStateFile path
+  pure $ mfilter (not . T.null) contents
 
 -- | Persist the workstation name to the state file (creating parent dirs).
 writeWorkstationState :: WorkstationName -> IO ()
 writeWorkstationState (WorkstationName raw) = do
   path <- workstationNameStateFile
-  createDirectoryIfMissing True (takeDirectory path)
-  TIO.writeFile path (raw <> "\n")
+  writeStateFile path raw
 
 -- | The set of valid workstation names: the names declared in the config, or the
 -- single default @"workstation"@ when the config declares none.
@@ -257,6 +252,7 @@ resolveWorkstation cfg opts = do
 ensureProperty
   :: ( Prop p
      , MonadIO m
+     , MonadMask m
      , MonadReader Settings m
      , MonadError WSError m
      , MonadState WSState m

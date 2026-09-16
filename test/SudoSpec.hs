@@ -6,6 +6,7 @@ module SudoSpec (spec) where
 import Test.Hspec
 import Funstation.Sudo
 import Data.Text qualified as T
+import System.Directory (createDirectory)
 import System.FilePath ((</>))
 import Shh.Internal (exe, captureTrim, (|>))
 
@@ -46,6 +47,27 @@ spec = do
       withFileMode f 0o444 $
         shouldBeM True $ needsSudo (T.pack f)
 
+    it "returns True when the nearest existing ancestor is not writable" $ withTempDir $ \tmpDir -> do
+      let locked = tmpDir </> "locked"
+      createDirectory locked
+      withFileMode locked 0o555 $
+        shouldBeM True $ needsSudo (T.pack (locked </> "deep" </> "nested" </> "leaf"))
+
+  describe "nearestExistingAncestor" $ do
+    it "returns the path itself when it exists" $ withTempDir $ \tmpDir -> do
+      let f = tmpDir </> "file.txt"
+      writeFile f "content"
+      shouldBeM f $ nearestExistingAncestor f
+
+    it "returns the parent when only the leaf is missing" $ withTempDir $ \tmpDir ->
+      shouldBeM tmpDir $ nearestExistingAncestor (tmpDir </> "missing")
+
+    it "skips past several missing levels" $ withTempDir $ \tmpDir ->
+      shouldBeM tmpDir $ nearestExistingAncestor (tmpDir </> "a" </> "b" </> "c")
+
+    it "terminates at the root rather than looping" $
+      shouldBeM "/" $ nearestExistingAncestor "/nonexistent-abc/def/ghi"
+
   describe "needsSudoFor" $ do
     it "ReadAccess dispatches to needsSudoRead" $ withTempDir $ \tmpDir -> do
       let f = tmpDir </> "file.txt"
@@ -67,7 +89,7 @@ spec = do
         shouldBeM True  $ needsSudoFor WriteAccess (T.pack f)  -- 444 is not writable
 
   describe "mkPrivCmd (permission-driven branch selection)" $ do
-    it "takes the env branch for a user-owned writable directory" $ withTempDir $ \tmpDir -> do
+    it "forms cmd with env if sudo unneeded" $ withTempDir $ \tmpDir -> do
       let outFile = tmpDir </> "out.txt"
       args <- mkPrivCmd "sudo" WriteAccess (T.pack tmpDir)
                 ["bash", "-c", T.pack $ "echo env-branch > " <> outFile]

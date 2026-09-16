@@ -58,6 +58,28 @@ properties:
     params:
       syncIntervalDays: 7
 #+end_src
+** BitwardenSecrets prerequisites
+
+This property logs in with a Bitwarden personal API key, and expects three files
+to exist before it runs:
+
+| file                        | where it comes from                                                       |
+|-----------------------------+---------------------------------------------------------------------------|
+| =~/secrets/bw_client_id=     | web vault, Account Settings -> Security -> Keys -> View API Key            |
+| =~/secrets/bw_client_secret= | same place                                                                |
+| =~/secrets/bw_master_pass=   | your master password                                                      |
+
+All three should be mode =0600=.
+
+The master password is still required: =bw login --apikey= authenticates the
+client, but it does not unlock the vault, so =bw unlock= still needs the
+password to produce a session token.
+
+The client id and secret are passed to =bw= through the environment rather than
+on the command line, so they do not show up in =ps=.
+
+=~/secrets/bw_email= is no longer read and can be deleted.
+
 * Usage
 ** Initial system setup
 *** downloading

@@ -28,21 +28,30 @@ needsSudoRead path = do
     else
       pure False
 
+-- | The nearest ancestor of a path that exists, including the path itself.
+--
+-- Walks up until something exists. Terminates at the filesystem root (and at
+-- @.@ for relative paths), where 'takeDirectory' is a fixed point.
+nearestExistingAncestor :: FilePath -> IO FilePath
+nearestExistingAncestor path = do
+  exists <- isRight <$> tryFailure (exe "test" "-e" path)
+  if exists
+    then pure path
+    else do
+      let parentDir = takeDirectory path
+      if parentDir == path
+        then pure path
+        else nearestExistingAncestor parentDir
+
 -- | Check if sudo is needed to write to a path.
--- For existing files, checks write permission on the file.
--- For non-existent files, checks write permission on the parent directory.
+--
+-- Checks write permission on path. For existing file, use the file itself.
+-- For a missing file, this is the nearest existing parent.
 needsSudo :: Text -> IO Bool
 needsSudo path = do
-  let pathStr = T.unpack path
-  exists <- isRight <$> tryFailure (exe "test" "-e" pathStr)
-  if exists
-    then do
-      writable <- isRight <$> tryFailure (exe "test" "-w" pathStr)
-      pure $ not writable
-    else do
-      let parentDir = takeDirectory pathStr
-      writable <- isRight <$> tryFailure (exe "test" "-w" parentDir)
-      pure $ not writable
+  target <- nearestExistingAncestor (T.unpack path)
+  writable <- isRight <$> tryFailure (exe "test" "-w" target)
+  pure $ not writable
 
 -- | Which filesystem permission to check when deciding whether sudo is needed.
 data AccessMode = ReadAccess | WriteAccess
@@ -62,8 +71,7 @@ mkPrivCmd sudoCmd mode pth args = do
     else ("env"   : args)
 
 -- | Refresh sudo credentials by running @sudo -v@.
--- If a password file path is provided, reads the password from that file
--- and pipes it to @sudo -S -v@. Otherwise, prompts interactively.
+-- Reads password from file if provided, otherwise prompts interactively.
 -- Returns True if successful, False otherwise.
 refreshSudo :: Maybe Text -> IO Bool
 refreshSudo Nothing = isRight <$> tryFailure (exe "sudo" "-v")
@@ -82,9 +90,7 @@ startSudoRefreshLoop = forkIO $ forever $ do
   void $ refreshSudo Nothing
 
 -- | Initialize sudo credential caching.
--- If a password file path is provided, reads password from it.
--- Otherwise, prompts for password interactively.
--- Returns the ThreadId of the refresh loop, or Nothing if initial auth failed.
+-- Read from provided password file, or prompt for password interactively. 
 initSudoCache :: Maybe Text -> IO (Maybe ThreadId)
 initSudoCache mpassFile = do
   case mpassFile of

@@ -7,15 +7,15 @@ module Funstation.Properties.AptUpdate where
 
 import Funstation.Types
 import Funstation.Commands
+import Funstation.State
 import Funstation.Proc
 import Shh (devNull, (&>))
 import GHC.Generics (Generic)
 import Data.Aeson.Types (FromJSON, ToJSON)
-import Data.Text qualified as T
 import System.Environment (getEnv)
-import System.Directory (doesFileExist, createDirectoryIfMissing)
+import System.FilePath ((</>))
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 
 data AptUpdateP = AptUpdateP
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
@@ -26,25 +26,14 @@ aptUpdateIntervalSeconds = 60 * 60 * 24
 
 -- | path to last successful @apt-get update@ time.
 aptUpdateTsFile :: FilePath -> FilePath
-aptUpdateTsFile home = home <> "/.local/state/funstation/apt-update/last-run-ts"
+aptUpdateTsFile home = stateFile home ("apt-update" </> "last-run-ts")
 
--- | Read the last-run POSIX timestamp; returns 0 if absent.
-getLastAptUpdateTs :: FilePath -> IO Integer
-getLastAptUpdateTs home = do
-  let tsFile = aptUpdateTsFile home
-  exists <- doesFileExist tsFile
-  if not exists
-    then return 0
-    else do
-      content <- readFile tsFile
-      return $ read $ T.unpack $ T.strip $ T.pack content
+-- | Read the last-run POSIX timestamp; 0 when never run.
+getLastAptUpdateTs :: MonadIO m => FilePath -> m Integer
+getLastAptUpdateTs = readTimestamp . aptUpdateTsFile
 
-saveLastAptUpdateTs :: FilePath -> IO ()
-saveLastAptUpdateTs home = do
-  let dir = home <> "/.local/state/funstation/apt-update"
-  createDirectoryIfMissing True dir
-  now <- round <$> getPOSIXTime
-  writeFile (aptUpdateTsFile home) (show (now :: Integer) <> "\n")
+saveLastAptUpdateTs :: MonadIO m => FilePath -> m ()
+saveLastAptUpdateTs = writeTimestamp . aptUpdateTsFile
 
 instance Prop AptUpdateP where
   desc _ = "apt package lists updated"

@@ -65,7 +65,7 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  Funstation, Funstation.Utility, Funstation.Sudo, Funstation.Types, Funstation.Commands,
-                      Funstation.Proc,
+                      Funstation.Proc, Funstation.State,
                       Funstation.Configuration,
                       Funstation.Properties.Dotfiles, Funstation.Properties.HasGit, Funstation.Properties.GitHomeDir, Funstation.Properties.GitClone,
                       Funstation.Properties.XCodeCLITools, Funstation.Properties.Homebrew, Funstation.Properties.HomebrewBundle,
@@ -84,6 +84,7 @@ library
         aeson,
         text,
         bytestring,
+        exceptions,
         optparse-applicative,
         shh,
         shelly,
@@ -137,9 +138,9 @@ test-suite funstation-test
     -- Spec modules are discovered automatically by hspec-discover (see Main.hs),
     -- but a plain .cabal file still needs each one listed here to compile/package it.
     other-modules:    SudoSpec, WorkstationSpec, UtilsSpec, CommandsSpec, TestHelpers,
-                      ConfigurationSpec, PropertySelectionSpec,
+                      ConfigurationSpec, PropertySelectionSpec, StateSpec,
                       Properties.GitHomeDirSpec, Properties.GitCloneSpec, Properties.DotfilesSpec,
-                      Properties.HasGitSpec
+                      Properties.HasGitSpec, Properties.BitwardenSecretsSpec
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

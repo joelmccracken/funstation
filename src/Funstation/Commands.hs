@@ -13,6 +13,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
 import Data.Maybe (isJust)
+import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory)
 import Control.Monad (void, unless)
 import Control.Concurrent (threadDelay)
@@ -60,6 +61,15 @@ dirExists path = isRight <$> cmd (exe "test" "-d" (T.unpack path))
 -- | Check if a file (or any path) exists.
 fileExists :: MonadIO m => Text -> m Bool
 fileExists path = isRight <$> cmd (exe "test" "-e" (T.unpack path))
+
+-- | Read file contents, stripped of surrounding whitespace, or 'Nothing'
+-- when the file does not exist.
+readFileIfExists :: MonadIO m => FilePath -> m (Maybe Text)
+readFileIfExists path = liftIO $ do
+  exists <- doesFileExist path
+  if exists
+    then Just . T.strip <$> TIO.readFile path
+    else pure Nothing
 
 -- | Create a directory (and any missing parents).
 mkDir :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
