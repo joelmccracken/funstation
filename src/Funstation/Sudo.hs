@@ -53,22 +53,46 @@ needsSudo path = do
   writable <- isRight <$> tryFailure (exe "test" "-w" target)
   pure $ not writable
 
+-- | Check if sudo is needed to create, rename, or remove the path itself.
+--
+-- Creating or removing a name is a write to the directory holding it,
+-- so check files nearest existing ancestor.
+needsSudoEntry :: Text -> IO Bool
+needsSudoEntry path = needsSudo $ T.pack $ takeDirectory (T.unpack path)
+
 -- | Which filesystem permission to check when deciding whether sudo is needed.
-data AccessMode = ReadAccess | WriteAccess
+data AccessMode
+  = ReadAccess   -- ^ read the contents of the path
+  | WriteAccess  -- ^ modify the contents of the path
+  | EntryAccess  -- ^ create, rename, or remove the path itself
+  | OwnerAccess  -- ^ change who owns the path
+  deriving (Eq, Show)
 
 needsSudoFor :: AccessMode -> Text -> IO Bool
 needsSudoFor ReadAccess  = needsSudoRead
 needsSudoFor WriteAccess = needsSudo
+needsSudoFor EntryAccess = needsSudoEntry
+-- Only root may change ownership to other user, always escalate
+needsSudoFor OwnerAccess = const $ pure True
 
--- | Build an IO Cmd that prepends the given sudo command if the path requires
--- the specified access, or @env@ (a no-op prefix) otherwise.
--- The returned IO Cmd can be chained with shh operators like |> and &>.
-mkPrivCmd :: String -> AccessMode -> Text -> [Text] -> IO [Text]
-mkPrivCmd sudoCmd mode pth args = do
-  useSudo <- needsSudoFor mode pth
+-- | Check if sudo is needed for any of the accesses a command performs.
+--
+-- For commands that may touch more than one path at once, such as @mv@.
+needsSudoForAny :: [(AccessMode, Text)] -> IO Bool
+needsSudoForAny = fmap or . traverse (uncurry needsSudoFor)
+
+-- | Build an IO Cmd that prepends the given sudo command if any of the
+-- accesses require it, otherwise @env@ (acts as a no-op prefix).
+mkPrivCmdFor :: String -> [(AccessMode, Text)] -> [Text] -> IO [Text]
+mkPrivCmdFor sudoCmd accesses args = do
+  useSudo <- needsSudoForAny accesses
   pure $ if useSudo
     then ((T.pack sudoCmd) : args)
     else ("env"   : args)
+
+-- | 'mkPrivCmdFor' for a command that touches a single path.
+mkPrivCmd :: String -> AccessMode -> Text -> [Text] -> IO [Text]
+mkPrivCmd sudoCmd mode pth = mkPrivCmdFor sudoCmd [(mode, pth)]
 
 -- | Refresh sudo credentials by running @sudo -v@.
 -- Reads password from file if provided, otherwise prompts interactively.

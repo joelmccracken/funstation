@@ -15,7 +15,7 @@ import Data.Either (isRight)
 import Data.Maybe (isJust)
 import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory)
-import Control.Monad (void, unless)
+import Control.Monad (void, unless, when)
 import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, asks)
@@ -105,7 +105,9 @@ mvToBackupAuto :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => T
 mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- privCmd WriteAccess path ["mv", path, backupPath]
+  -- rename; write is to the directory, not files themselves
+  result <- privCmdFor [(EntryAccess, path), (EntryAccess, backupPath)]
+              ["mv", path, backupPath]
   case result of
     Right _ -> do
       putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
@@ -177,13 +179,16 @@ fileContentsFix path content = do
             else pure ""
 
           -- Move temp file to target location (only use sudo if needed)
-          moveResult <- privCmd WriteAccess path ["mv", T.pack tempFile, path]
+          moveResult <- privCmdFor [(EntryAccess, T.pack tempFile), (EntryAccess, path)]
+                          ["mv", T.pack tempFile, path]
           case moveResult of
             Left err -> throwError $ WSFailure $ "Failed to move file to " <> path <> ": " <> tshow err
             Right _ -> pure ()
 
-          -- Restore original ownership when sudo was used
-          void $ privCmd WriteAccess path ["chown", ownerGroup, path]
+          -- restore original path ownership
+          movedOwnerGroup <- getOwnerGroup path
+          when (movedOwnerGroup /= ownerGroup) $
+            void $ privCmd OwnerAccess path ["chown", ownerGroup, path]
           pure $ Just backupPath
 
 -- Primitive WS utilities

@@ -9,7 +9,7 @@ import Data.Set qualified as Set
 import Control.Monad.State (runStateT)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Except (runExceptT)
-import System.Posix.Files (setFileMode)
+import System.Posix.Files (setFileMode, getFileStatus, fileMode)
 import System.IO.Temp (withSystemTempDirectory)
 import Control.Exception (bracket_)
 
@@ -52,12 +52,12 @@ runWSEither o action = do
   fst <$> runStateT (runExceptT (runReaderT (unWS action) (mkSettings "sudo" o))) initialState
 
 -- | Temporarily set a file's mode, restoring the original after the action.
--- Ensures cleanup can proceed even if the action throws.
 withFileMode :: FilePath -> Int -> IO a -> IO a
-withFileMode path newMode action =
+withFileMode path newMode action = do
+  originalMode <- fileMode <$> getFileStatus path
   bracket_
     (setFileMode path (fromIntegral newMode))
-    (setFileMode path 0o644)
+    (setFileMode path originalMode)
     action
 
 failLeft :: Either WSError a -> IO a

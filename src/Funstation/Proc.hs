@@ -21,14 +21,18 @@ import Funstation.Sudo
 
 
 -- | Run a privilege-escalating command in the WS monad.
--- Reads the sudo command from Settings; uses AccessMode to choose the
--- permission check (read or write).
-privCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => AccessMode -> Text -> [Text] -> m (Either Failure ())
-privCmd mode pth args = do
+-- Reads the sudo command from Settings; escalates when any of the paths the
+-- command touches requires the access paired with it.
+privCmdFor :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [(AccessMode, Text)] -> [Text] -> m (Either Failure ())
+privCmdFor accesses args = do
   sc <- asks (.sudoCmd)
 
-  c  <- liftIO $ mkPrivCmd sc mode pth args
+  c  <- liftIO $ mkPrivCmdFor sc accesses args
   runCmd c id
+
+-- | 'privCmdFor' for a command that touches a single path.
+privCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => AccessMode -> Text -> [Text] -> m (Either Failure ())
+privCmd mode pth = privCmdFor [(mode, pth)]
 
 mkWSCmd :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [Text] -> m [Text]
 mkWSCmd c = do
