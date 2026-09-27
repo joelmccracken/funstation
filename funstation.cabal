@@ -154,9 +154,6 @@ test-suite funstation-test
     -- The entrypoint to the test suite.
     main-is:          Main.hs
 
-    -- Generates the Main entrypoint by discovering all *Spec modules.
-    build-tool-depends: hspec-discover:hspec-discover
-
     -- Test dependencies.
     build-depends:
         base,

@@ -13,6 +13,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
 import Data.Maybe (isJust)
+import Data.Char (intToDigit)
 import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory)
 import Control.Monad (void, unless, when)
@@ -89,7 +90,6 @@ ensureParentDir path = do
       Left err -> throwError $ WSFailure $ "Failed to create directory " <> parentDir <> ": " <> tshow err
 
 -- | Get "owner:group" for a path, for use with chown.
--- Uses ls -ld which works on both macOS and Linux.
 getOwnerGroup :: MonadIO m => Text -> m Text
 getOwnerGroup path = do
   result <- cmd (exe "ls" "-ld" (T.unpack path) |> captureTrim)
@@ -99,6 +99,29 @@ getOwnerGroup path = do
       case words $ TL.unpack $ TL.decodeUtf8 bytes of
         (_:_:owner:group:_) -> pure $ T.pack owner <> ":" <> T.pack group
         _ -> pure "root:root"
+
+-- | Get the octal permission mode (e.g. "644") for a path, for use with chmod.
+getMode :: MonadIO m => Text -> m Text
+getMode path = do
+  result <- cmd (exe "ls" "-ld" (T.unpack path) |> captureTrim)
+  case result of
+    Left _ -> pure "644"
+    Right bytes ->
+      case words $ TL.unpack $ TL.decodeUtf8 bytes of
+        (perms:_) -> pure $ permsToOctal (T.pack perms)
+        _ -> pure "644"
+
+-- | Convert an @ls -l@ style permission string (e.g. "-rw-r--r--") to an
+-- octal mode string (e.g. "644"). Setuid/setgid/sticky markers are treated
+-- the same as executable bit; fine for simple files
+permsToOctal :: Text -> Text
+permsToOctal perms = T.pack $ map triadToDigit (chunksOf3 rwx)
+  where
+    rwx = T.unpack $ T.drop 1 perms  -- drop the leading file-type character
+    chunksOf3 [] = []
+    chunksOf3 cs = take 3 cs : chunksOf3 (drop 3 cs)
+    triadToDigit triad = intToDigit $ sum
+      $ map snd $ filter ((/= '-') . fst) $ zip triad [4, 2, 1 :: Int]
 
 -- | Move a file to a timestamped backup, using sudo only if needed.
 mvToBackupAuto :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m Text
@@ -167,11 +190,11 @@ fileContentsFix path content = do
           -- Write desired content to temp file
           liftIO $ TIO.writeFile tempFile content
 
-          -- Check if target exists; capture owner info before any changes
+          -- Check if target exists; capture owner/mode info before any changes
           targetExists <- fileExists path
-          ownerGroup <- if targetExists
-            then getOwnerGroup path
-            else getOwnerGroup (T.pack $ takeDirectory (T.unpack path))
+          (ownerGroup, mode) <- if targetExists
+            then (,) <$> getOwnerGroup path <*> getMode path
+            else (,) <$> getOwnerGroup (T.pack $ takeDirectory (T.unpack path)) <*> pure "644"
 
           -- Back up existing file if present
           backupPath <- if targetExists
@@ -185,10 +208,13 @@ fileContentsFix path content = do
             Left err -> throwError $ WSFailure $ "Failed to move file to " <> path <> ": " <> tshow err
             Right _ -> pure ()
 
-          -- restore original path ownership
+          -- restore original path ownership and permissions
           movedOwnerGroup <- getOwnerGroup path
           when (movedOwnerGroup /= ownerGroup) $
             void $ privCmd OwnerAccess path ["chown", ownerGroup, path]
+          movedMode <- getMode path
+          when (movedMode /= mode) $
+            void $ privCmd ModeAccess path ["chmod", mode, path]
           pure $ Just backupPath
 
 -- Primitive WS utilities

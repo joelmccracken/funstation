@@ -12,6 +12,8 @@ import System.FilePath ((</>))
 import Shh.Internal (exe, devNull, (&>), captureTrim, (|>), tryFailure)
 import Data.Either (isRight, isLeft)
 import Data.Maybe (isJust)
+import Data.Bits ((.&.))
+import System.Posix.Files (setFileMode, getFileStatus, fileMode)
 
 import Funstation hiding (main, failLeft)
 import Funstation.Proc
@@ -99,6 +101,20 @@ spec = do
       shouldSatisfyM isJust $ runWS $ fileContentsFix (T.pack testFile) (T.pack newContent)
       -- Verify new content
       shouldBeM newContent $ readFile testFile
+
+    it "preserves the original file's permission mode" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      writeFile testFile "original content"
+      setFileMode testFile 0o644
+      shouldSatisfyM isJust $ runWS $ fileContentsFix (T.pack testFile) "new content"
+      status <- getFileStatus testFile
+      (fileMode status .&. 0o777) `shouldBe` 0o644
+
+    it "gives a newly-created file mode 644 rather than mktemp's default 0600" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "newfile"
+      shouldBeM (Just "") $ runWS $ fileContentsFix (T.pack testFile) "new content"
+      status <- getFileStatus testFile
+      (fileMode status .&. 0o777) `shouldBe` 0o644
 
   describe "mkPrivCmd" $ do
     it "uses env prefix when path is user-owned (no sudo needed)" $ withTempDir $ \tmpDir -> do

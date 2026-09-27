@@ -147,6 +147,19 @@ spec = do
         shouldBeM False $ needsSudoFor ReadAccess  (T.pack f)  -- 444 is readable by owner
         shouldBeM True  $ needsSudoFor WriteAccess (T.pack f)  -- 444 is not writable
 
+    it "ModeAccess dispatches to needsSudoMode" $ withTempDir $ \tmpDir -> do
+      let f = tmpDir </> "file.txt"
+      writeFile f "content"
+      direct <- needsSudoMode (T.pack f)
+      shouldBeM direct $ needsSudoFor ModeAccess (T.pack f)
+
+    it "ModeAccess is False for a user-owned file irrespective of its write bit" $ withTempDir $ \tmpDir -> do
+      -- The owner may always chmod their own file
+      let f = tmpDir </> "readonly.txt"
+      writeFile f "content"
+      withFileMode f 0o444 $
+        shouldBeM False $ needsSudoFor ModeAccess (T.pack f)
+
   describe "mkPrivCmdFor (multi-path branch selection)" $ do
     it "uses the env prefix when every access is allowed" $ withTempDir $ \tmpDir -> do
       let src = tmpDir </> "src.txt"

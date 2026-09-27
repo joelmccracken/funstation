@@ -34,6 +34,7 @@
                                cabal = {};
                                hlint = {};
                                haskell-language-server = {};
+                               hspec-discover = {};
                              };
                              # Non-Haskell shell tools go here
                              shell.buildInputs = with pkgs; [

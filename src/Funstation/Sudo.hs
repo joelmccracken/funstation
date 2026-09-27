@@ -60,12 +60,27 @@ needsSudo path = do
 needsSudoEntry :: Text -> IO Bool
 needsSudoEntry path = needsSudo $ T.pack $ takeDirectory (T.unpack path)
 
+-- | Check if sudo is needed to chmod a path.
+--
+-- file's owner may always chmod it, so check ownership
+needsSudoMode :: Text -> IO Bool
+needsSudoMode path = do
+  let pathStr = T.unpack path
+  exists <- isRight <$> tryFailure (exe "test" "-e" pathStr)
+  if exists
+    then do
+      owned <- isRight <$> tryFailure (exe "test" "-O" pathStr)
+      pure $ not owned
+    else
+      pure False
+
 -- | Which filesystem permission to check when deciding whether sudo is needed.
 data AccessMode
   = ReadAccess   -- ^ read the contents of the path
   | WriteAccess  -- ^ modify the contents of the path
   | EntryAccess  -- ^ create, rename, or remove the path itself
   | OwnerAccess  -- ^ change who owns the path
+  | ModeAccess   -- ^ change the path's permission mode (chmod)
   deriving (Eq, Show)
 
 needsSudoFor :: AccessMode -> Text -> IO Bool
@@ -74,6 +89,7 @@ needsSudoFor WriteAccess = needsSudo
 needsSudoFor EntryAccess = needsSudoEntry
 -- Only root may change ownership to other user, always escalate
 needsSudoFor OwnerAccess = const $ pure True
+needsSudoFor ModeAccess  = needsSudoMode
 
 -- | Check if sudo is needed for any of the accesses a command performs.
 --
