@@ -41,7 +41,9 @@ import Control.Monad.Except (MonadError, runExceptT)
 import Control.Monad.Catch (MonadMask)
 import Data.Set (Set)
 import System.Directory (getHomeDirectory)
-import System.Exit (exitFailure)
+import System.Environment (lookupEnv, setEnv)
+import System.Exit (exitFailure, exitWith)
+import System.Process (createProcess, proc, waitForProcess, delegate_ctlc)
 
 -- | Select the properties to run for a workstation. If the workstation declares a
 -- 'use' list, resolve each name against the named registry entries (in list order),
@@ -76,6 +78,12 @@ unknownPropertyError n known =
 homeManagerProps :: [Property] -> [HomeManagerP]
 homeManagerProps props = [ p | HomeManager p <- props ]
 
+gitHomeDirProps :: [Property] -> [GitHomeDirP]
+gitHomeDirProps = mapMaybe asGitHomeDir
+ where
+  asGitHomeDir (GitHomeDir p) = Just p
+  asGitHomeDir _ = Nothing
+
 getProp :: Property -> IsProp
 getProp (GitHomeDir p) = IsProp p
 getProp (GitClone p) = IsProp p
@@ -104,6 +112,14 @@ homeManagerSubcommandParser = subparser
     )
   )
 
+gitHomeDirSubcommandParser :: Parser GitHomeDirSubcommand
+gitHomeDirSubcommandParser = subparser
+  ( App.command "sh"
+    ( info (pure GitHomeDirShell <**> helper)
+      ( progDesc "Start $SHELL with GIT_DIR set to the git home dir" )
+    )
+  )
+
 commandParser :: Parser Command
 commandParser = subparser
   ( App.command "bootstrap"
@@ -117,6 +133,10 @@ commandParser = subparser
  <> App.command "home-manager"
     ( info (HomeManagerCmd <$> homeManagerSubcommandParser <**> helper)
       ( progDesc "home-manager utilities" )
+    )
+ <> App.command "git-home-dir"
+    ( info (GitHomeDirCmd <$> gitHomeDirSubcommandParser <**> helper)
+      ( progDesc "git home dir utilities" )
     )
  <> App.command "status"
     ( info (pure Status <**> helper)
@@ -312,6 +332,7 @@ main = do
     Bootstrap -> doBootstrap opts ws os cfg
     Nix NixRestart -> doNixRestart opts ws os
     HomeManagerCmd HomeManagerRebuild -> doHomeManagerRebuild opts ws os cfg
+    GitHomeDirCmd GitHomeDirShell -> doGitHomeDirShell ws cfg
     Status -> doStatus opts ws os cfg
 
   -- Clean up sudo refresh thread
@@ -363,10 +384,26 @@ main = do
           runExceptT (runReaderT (forM_ hms fixer) (settings opts ws os))
         failLeft result
 
+  -- Start $SHELL (falling back to /bin/sh) with GIT_DIR pointing at the
+  -- workstation's git home dir, exiting with the shell's exit code.
+  doGitHomeDirShell ws cfg = do
+    props <- resolveProps ws cfg
+    case gitHomeDirProps props of
+      [] -> do
+        putStrLn $ "fun: error: no GitHomeDir property configured for workstation "
+                <> T.unpack (unWorkstationName ws)
+        exitFailure
+      (p:_) -> do
+        expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)
+        expandedGitDir  <- resolveGitDir expandedHomeDir <$> expandPath p.gitDir
+        shell <- fromMaybe "/bin/sh" <$> lookupEnv "SHELL"
+        setEnv "GIT_DIR" (T.unpack expandedGitDir)
+        (_, _, _, ph) <- createProcess (proc shell []) { delegate_ctlc = True }
+        waitForProcess ph >>= exitWith
+
   doStatus opts ws os cfg = do
     props <- resolveProps ws cfg
-    let gitHomeDirs = [ p | GitHomeDir p <- props ]
-    case gitHomeDirs of
+    case gitHomeDirProps props of
       [] -> putStrLn "Nothing to report."
       (p:_) -> do
         expandedHomeDir <- expandPath (fromMaybe "~" p.homeDir)

@@ -98,6 +98,13 @@ fun home-manager rebuild
 #+end_src
 This builds and runs the activation script for the ~HomeManager~ property
 for the current workstation.
+** Working with the git home dir
+To start a shell with ~GIT_DIR~ set to the ~GitHomeDir~ property's git dir, so
+plain ~git~ commands operate on your home dir repo:
+#+begin_src sh
+fun git-home-dir sh
+#+end_src
+This runs ~$SHELL~ (or ~/bin/sh~ if unset); exit the shell to return.
 * build, test, run
 ** from within a nix develop session
 run with

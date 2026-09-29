@@ -87,10 +87,15 @@ data HomeManagerSubcommand
   = HomeManagerRebuild
   deriving (Show)
 
+data GitHomeDirSubcommand
+  = GitHomeDirShell
+  deriving (Show)
+
 data Command
   = Bootstrap
   | Nix NixSubcommand
   | HomeManagerCmd HomeManagerSubcommand
+  | GitHomeDirCmd GitHomeDirSubcommand
   | Status
   deriving (Show)
 
