@@ -103,6 +103,29 @@ if [ "$IS_MAC" -eq 1 ]; then
   check "brew formula 'hello' is installed" brew list hello
 fi
 
+echo "== BitwardenSecrets =="
+check "bw is installed" command -v bw
+check "last-sync timestamp recorded" \
+  test -s "$HOME/.local/state/funstation/bitwarden-secrets/last-sync-ts"
+# The CI vault has an item `file:~/funstation-ci/bw/ci-fixture` in the
+# bww_files folder whose notes contain this marker.
+BW_FIXTURE="$BASE/bw/ci-fixture"
+if [ -f "$BW_FIXTURE" ]; then
+  if grep -q "funstation-ci-bitwarden-fixture" "$BW_FIXTURE"; then
+    pass "vault fixture written with expected contents"
+  else
+    fail "vault fixture $BW_FIXTURE does not contain the expected marker"
+  fi
+  if [ "$IS_MAC" -eq 1 ]; then mode="$(stat -f %Lp "$BW_FIXTURE")"; else mode="$(stat -c %a "$BW_FIXTURE")"; fi
+  if [ "$mode" = "600" ]; then
+    pass "vault fixture has mode 600"
+  else
+    fail "vault fixture has mode $mode, expected 600"
+  fi
+else
+  fail "vault fixture $BW_FIXTURE was not written"
+fi
+
 echo
 if [ "$FAILS" -eq 0 ]; then
   echo "ALL STATE CHECKS PASSED"

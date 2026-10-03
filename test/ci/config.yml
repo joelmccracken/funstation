@@ -1,9 +1,9 @@
 workstations:
   # home-manager runs via nix after nix installed
   - name: ci-linux
-    use: [nix-daemon, git-home-dir, dotfiles, home-manager]
+    use: [nix-daemon, git-home-dir, dotfiles, home-manager, bitwarden-secrets]
   - name: ci-macos
-    use: [nix-daemon, git-home-dir, dotfiles, brew-bundle, home-manager]
+    use: [nix-daemon, git-home-dir, dotfiles, brew-bundle, home-manager, bitwarden-secrets]
 
 properties:
   - name: nix-daemon
@@ -50,3 +50,11 @@ properties:
     type: HomebrewBundle
     params:
       brewfile: "$HOME/funstation-ci/Brewfile"
+
+  # Logs in to the dedicated CI Bitwarden account (creds written to ~/secrets by
+  # the workflow) and writes its `file:` items. The vault holds a fixture item
+  # `file:~/funstation-ci/bw/ci-fixture` that verify.sh checks for.
+  - name: bitwarden-secrets
+    type: BitwardenSecrets
+    params:
+      syncIntervalDays: 7

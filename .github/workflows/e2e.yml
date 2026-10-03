@@ -24,6 +24,8 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'e2e')
     needs: [build]
     runs-on: ${{ matrix.os }}
+    # Holds the BW_* secrets for the dedicated CI Bitwarden account.
+    environment: e2e
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +52,29 @@ jobs:
 
       - name: Generate hermetic GitHomeDir source repo + fixtures
         run: bash test/ci/setup-src-repo.sh
+
+      # BitwardenSecrets expects `bw` on PATH; it doesn't install it.
+      - name: Install Bitwarden CLI
+        run: npm install -g @bitwarden/cli
+
+      # BitwardenSecrets reads its credentials from ~/secrets/bw_*.
+      - name: Write Bitwarden credentials
+        env:
+          BW_MASTER_PASS: ${{ secrets.BW_MASTER_PASS }}
+          BW_CLIENT_ID: ${{ secrets.BW_CLIENT_ID }}
+          BW_CLIENT_SECRET: ${{ secrets.BW_CLIENT_SECRET }}
+        run: |
+          for v in BW_MASTER_PASS BW_CLIENT_ID BW_CLIENT_SECRET; do
+            if [ -z "${!v}" ]; then
+              echo "::error::secret $v is not set (secrets are unavailable to fork PRs)"
+              exit 1
+            fi
+          done
+          umask 077
+          mkdir -p ~/secrets
+          printf '%s' "$BW_CLIENT_ID"     > ~/secrets/bw_client_id
+          printf '%s' "$BW_CLIENT_SECRET" > ~/secrets/bw_client_secret
+          printf '%s' "$BW_MASTER_PASS"   > ~/secrets/bw_master_pass
 
       # pipefail - ensure fun failure fails step
       - name: Bootstrap (first run)
