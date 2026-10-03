@@ -18,7 +18,7 @@ jobs:
           - triple: x86_64-darwin
             runner: macos-15-intel
           - triple: aarch64-darwin
-            runner: macos-14
+            runner: macos-15
     steps:
       - uses: actions/checkout@v4
       # The static Linux nix build exhausts the ubuntu-latest disk without this.

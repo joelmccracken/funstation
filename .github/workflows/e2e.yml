@@ -33,7 +33,7 @@ jobs:
           - os: ubuntu-latest
             triple: x86_64-linux
             ws: ci-linux
-          - os: macos-14
+          - os: macos-15
             triple: aarch64-darwin
             ws: ci-macos
     steps:
