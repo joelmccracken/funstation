@@ -23,6 +23,7 @@ import Funstation.Properties.CoreDependencies
 import Funstation.Properties.NixDaemon ()
 import Funstation.Properties.HomeManager (HomeManagerP)
 import Funstation.Properties.BitwardenSecrets ()
+import Funstation.Properties.Sudoers ()
 
 import Options.Applicative
 import Options.Applicative qualified as App
@@ -92,6 +93,7 @@ getProp (NixDaemon p) = IsProp p
 getProp (HomeManager p) = IsProp p
 getProp (HomebrewBundle p) = IsProp p
 getProp (BitwardenSecrets p) = IsProp p
+getProp (Sudoers p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = pure Bootstrap

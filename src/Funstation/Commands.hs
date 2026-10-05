@@ -12,7 +12,7 @@ import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Data.Either (isRight)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe)
 import Data.Char (intToDigit)
 import System.Directory (doesFileExist)
 import System.FilePath (takeDirectory)
@@ -21,7 +21,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, asks)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Shh (exe, devNull, (&>), captureTrim, (|>), Failure)
+import Shh (exe, devNull, (&>), capture, captureTrim, (|>), Failure)
 import Control.Monad.Except (MonadError, throwError)
 import Funstation.Types
 import Funstation.Sudo
@@ -169,12 +169,27 @@ fileContentsCheck path content = do
 
       pure result
 
+-- | Options for 'fileContentsFixWith'.
+data FixOpts m = FixOpts
+  { validate :: Maybe (FilePath -> m Bool)
+    -- ^ Run on the temp file holding the new contents
+  , newMode  :: Maybe Text
+    -- ^ Octal mode for new files (default @"644"@)
+  }
+
+defaultFixOpts :: FixOpts m
+defaultFixOpts = FixOpts { validate = Nothing, newMode = Nothing }
+
 -- | Ensure a file has the desired contents.
 -- Returns Nothing if no change was needed, Just backupPath if the file was updated.
 -- The backupPath will be empty string if no backup was needed (file didn't exist).
 -- TODO think about what parts to reuse/share (e.g. with dotfiles code)
 fileContentsFix :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> Text -> m (Maybe Text)
-fileContentsFix path content = do
+fileContentsFix = fileContentsFixWith defaultFixOpts
+
+-- | 'fileContentsFix', with validation and new-file mode controlled by 'FixOpts'.
+fileContentsFixWith :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => FixOpts m -> Text -> Text -> m (Maybe Text)
+fileContentsFixWith opts path content = do
   -- First check if file already has correct contents
   isCorrect <- fileContentsCheck path content
   if isCorrect
@@ -186,35 +201,48 @@ fileContentsFix path content = do
         Left err -> throwError $ WSFailure $ "Failed to create temp file: " <> tshow err
         Right tempFileBytes -> do
           let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
+              tempFileT = T.pack tempFile
 
           -- Write desired content to temp file
           liftIO $ TIO.writeFile tempFile content
+
+          -- Validate the new contents before touching the target
+          case opts.validate of
+            Nothing -> pure ()
+            Just v -> do
+              valid <- v tempFile
+              unless valid $ do
+                void $ cmd $ exe ["rm", "-f", tempFile]
+                throwError $ WSFailure $ "New contents for " <> path <> " failed validation; left unchanged"
 
           -- Check if target exists; capture owner/mode info before any changes
           targetExists <- fileExists path
           (ownerGroup, mode) <- if targetExists
             then (,) <$> getOwnerGroup path <*> getMode path
-            else (,) <$> getOwnerGroup (T.pack $ takeDirectory (T.unpack path)) <*> pure "644"
+            else (,) <$> getOwnerGroup (T.pack $ takeDirectory (T.unpack path)) <*> pure (fromMaybe "644" opts.newMode)
+
+          -- Give the temp file the target's mode and ownership before moving
+          -- it in, so the target never exists with the wrong ones
+          tempMode <- getMode tempFileT
+          when (tempMode /= mode) $
+            void $ privCmd ModeAccess tempFileT ["chmod", mode, tempFileT]
+          tempOwnerGroup <- getOwnerGroup tempFileT
+          when (tempOwnerGroup /= ownerGroup) $
+            void $ privCmd OwnerAccess tempFileT ["chown", ownerGroup, tempFileT]
 
           -- Back up existing file if present
           backupPath <- if targetExists
             then mvToBackupAuto path
             else pure ""
 
-          -- Move temp file to target location (only use sudo if needed)
-          moveResult <- privCmdFor [(EntryAccess, T.pack tempFile), (EntryAccess, path)]
-                          ["mv", T.pack tempFile, path]
+          -- Move temp file to target location
+          -- may need owner change, so check EntryAccess, etc
+          moveResult <- privCmdFor [(EntryAccess, tempFileT), (EntryAccess, path), (ModeAccess, tempFileT)]
+                          ["mv", tempFileT, path]
           case moveResult of
             Left err -> throwError $ WSFailure $ "Failed to move file to " <> path <> ": " <> tshow err
             Right _ -> pure ()
 
-          -- restore original path ownership and permissions
-          movedOwnerGroup <- getOwnerGroup path
-          when (movedOwnerGroup /= ownerGroup) $
-            void $ privCmd OwnerAccess path ["chown", ownerGroup, path]
-          movedMode <- getMode path
-          when (movedMode /= mode) $
-            void $ privCmd ModeAccess path ["chmod", mode, path]
           pure $ Just backupPath
 
 -- Primitive WS utilities
@@ -230,6 +258,34 @@ expandPath :: MonadIO m => Text -> m Text
 expandPath path = do
   result <- cmd $ (exe ["bash", "-c", ("echo " <> T.unpack path)] |> captureTrim)
   pure $ either (const path) (TL.toStrict . TL.decodeUtf8) result
+
+-- | Expand variables in multi-line text (e.g. file contents) with bash, by
+-- feeding it through an unquoted heredoc.
+--
+-- Unlike 'expandPath', the text is not parsed as a command line: parens,
+-- newlines, comments, stars, and whitespace are kept as written; only
+-- @$VAR@, @${VAR}@, @$(...)@, backticks, and backslashes are interpreted.
+-- Referencing an unset variable is an error (@set -u@), rather than 
+-- expanding to nothing.
+--
+-- Caveats:
+--
+-- * a literal @$@ must be written @\\$@, and a literal @\\@ as @\\\\@
+-- * a line consisting of exactly @FUNSTATION_EOF@ ends the heredoc early
+-- * expansion runs as the invoking user, never via sudo
+expandText :: (MonadIO m, MonadError WSError m) => Text -> m Text
+expandText text = do
+  -- TODO I really should figure out a better way to handle interpolations etc
+  -- the heredoc always ends its output with a newline; match the input
+  let endsInNewline = "\n" `T.isSuffixOf` text
+      body = if endsInNewline then text else text <> "\n"
+      script = "set -u\ncat <<FUNSTATION_EOF\n" <> body <> "FUNSTATION_EOF\n"
+  result <- cmd (exe "bash" "-c" (T.unpack script) |> capture)
+  case result of
+    Left err -> throwError $ WSFailure $ "Failed to expand text: " <> tshow err
+    Right bytes -> do
+      let expanded = TL.toStrict $ TL.decodeUtf8 bytes
+      pure $ if endsInNewline then expanded else fromMaybe expanded (T.stripSuffix "\n" expanded)
 
 mvToBackup :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
 mvToBackup path = do

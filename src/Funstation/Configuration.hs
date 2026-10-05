@@ -12,6 +12,7 @@ import Funstation.Properties.NixDaemon         (NixDaemonP)
 import Funstation.Properties.HomeManager (HomeManagerP)
 import Funstation.Properties.HomebrewBundle (HomebrewBundleP)
 import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP)
+import Funstation.Properties.Sudoers (SudoersP)
 import Funstation.Types (WorkstationName, PropertyName)
 import Data.Aeson.Types hiding (Parser, Options)
 import GHC.Generics (Generic)
@@ -24,6 +25,7 @@ data Property
   | HomeManager     HomeManagerP
   | HomebrewBundle      HomebrewBundleP
   | BitwardenSecrets    BitwardenSecretsP
+  | Sudoers             SudoersP
   deriving (Show, Generic)
 
 instance ToJSON Property where

@@ -70,7 +70,8 @@ library
                       Funstation.Properties.Dotfiles, Funstation.Properties.HasGit, Funstation.Properties.GitHomeDir, Funstation.Properties.GitClone,
                       Funstation.Properties.XCodeCLITools, Funstation.Properties.Homebrew, Funstation.Properties.HomebrewBundle,
                       Funstation.Properties.AptUpdate, Funstation.Properties.CoreDependencies, Funstation.Properties.NixDaemon,
-                      Funstation.Properties.HomeManager, Funstation.Properties.BitwardenSecrets
+                      Funstation.Properties.HomeManager, Funstation.Properties.BitwardenSecrets,
+                      Funstation.Properties.Sudoers
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -140,7 +141,8 @@ test-suite funstation-test
     other-modules:    SudoSpec, WorkstationSpec, UtilsSpec, CommandsSpec, TestHelpers,
                       ConfigurationSpec, PropertySelectionSpec, StateSpec,
                       Properties.GitHomeDirSpec, Properties.GitCloneSpec, Properties.DotfilesSpec,
-                      Properties.HasGitSpec, Properties.BitwardenSecretsSpec
+                      Properties.HasGitSpec, Properties.BitwardenSecretsSpec,
+                      Properties.SudoersSpec
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

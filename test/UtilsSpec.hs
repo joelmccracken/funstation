@@ -13,6 +13,7 @@ import Shh.Internal (exe, devNull, (&>), captureTrim, (|>), tryFailure)
 import Data.Either (isRight, isLeft)
 import Data.Maybe (isJust)
 import Data.Bits ((.&.))
+import Control.Monad.IO.Class (liftIO)
 import System.Posix.Files (setFileMode, getFileStatus, fileMode)
 
 import Funstation hiding (main, failLeft)
@@ -115,6 +116,39 @@ spec = do
       shouldBeM (Just "") $ runWS $ fileContentsFix (T.pack testFile) "new content"
       status <- getFileStatus testFile
       (fileMode status .&. 0o777) `shouldBe` 0o644
+
+  describe "fileContentsFixWith" $ do
+    it "leaves the target and its directory untouched when validation fails" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      writeFile testFile "original content"
+      let opts = defaultFixOpts { validate = Just (const (pure False)) }
+      result <- runWSEither MacOS $ fileContentsFixWith opts (T.pack testFile) "new content"
+      result `shouldSatisfy` isLeft
+      shouldBeM "original content" $ readFile testFile
+      -- no backup was made
+      shouldBeM ["testfile"] $ listDirectory tmpDir
+
+    it "passes the validator a file holding the new contents" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      let opts = defaultFixOpts { validate = Just (\f -> liftIO $ (== "new content") <$> readFile f) }
+      shouldBeM (Just "") $ runWS $ fileContentsFixWith opts (T.pack testFile) "new content"
+      shouldBeM "new content" $ readFile testFile
+
+    it "applies newMode to a newly created file" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "newfile"
+      let opts = defaultFixOpts { newMode = Just "440" }
+      shouldBeM (Just "") $ runWS $ fileContentsFixWith opts (T.pack testFile) "new content"
+      status <- getFileStatus testFile
+      (fileMode status .&. 0o777) `shouldBe` 0o440
+
+    it "ignores newMode when the file already exists" $ withTempDir $ \tmpDir -> do
+      let testFile = tmpDir </> "testfile"
+      writeFile testFile "original content"
+      setFileMode testFile 0o600
+      let opts = defaultFixOpts { newMode = Just "440" }
+      shouldSatisfyM isJust $ runWS $ fileContentsFixWith opts (T.pack testFile) "new content"
+      status <- getFileStatus testFile
+      (fileMode status .&. 0o777) `shouldBe` 0o600
 
   describe "mkPrivCmd" $ do
     it "uses env prefix when path is user-owned (no sudo needed)" $ withTempDir $ \tmpDir -> do

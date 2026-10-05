@@ -5,6 +5,15 @@ workstations:
   - name: "nixbox"
     use: [home-dotfiles, home-manager, bitwarden]
 properties:
+  # Installs /etc/sudoers.d/<filename> (validated with visudo, mode 0440).
+  # Content is expanded by bash: $USER is the invoking user;
+  # Does nothing on nixos
+  - name: sudoers
+    type: Sudoers
+    params:
+      filename: funstation   # optional; must not contain '.' or end in '~'
+      content: |
+        $USER ALL=(ALL) NOPASSWD: ALL
   - name: home-dotfiles
     type: GitHomeDir
     params:
