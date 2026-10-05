@@ -26,6 +26,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Holds the BW_* secrets for the dedicated CI Bitwarden account.
     environment: e2e
+    # Authenticate nix's GitHub fetches (avoid unauthenticated API rate limit)
+    env:
+      NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
     strategy:
       fail-fast: false
       matrix:
