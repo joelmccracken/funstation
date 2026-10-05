@@ -11,31 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: haskell-actions/setup@v2
-        id: setup
+      # The nix dev shell's closure is large; free up room as build.yml does.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
         with:
-          ghc-version: '9.10.2'
-          cabal-version: 'latest'
+          tool-cache: false
 
-      - name: Configure
-        run: cabal configure --enable-tests
-
-      - name: Freeze dependencies
-        run: cabal freeze
-
-      - name: Cache cabal store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.setup.outputs.cabal-store }}
-          key: ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('cabal.project.freeze') }}
-          restore-keys: |
-            ${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
-
-      - name: Build dependencies
-        run: cabal build all --only-dependencies
+      - uses: DeterminateSystems/nix-installer-action@v14
 
       - name: Build
-        run: cabal build all
+        run: nix develop --accept-flake-config -c cabal build all
 
       - name: Test
-        run: cabal test all
+        run: nix develop --accept-flake-config -c cabal test all
