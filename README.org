@@ -98,6 +98,22 @@ fun home-manager rebuild
 #+end_src
 This builds and runs the activation script for the ~HomeManager~ property
 for the current workstation.
+** Syncing Bitwarden secrets
+Bootstrap only re-syncs Bitwarden secrets once ~syncIntervalDays~ have passed.
+To sync them now, regardless of when they were last synced:
+#+begin_src sh
+fun bitwarden-secrets sync
+#+end_src
+This runs the ~BitwardenSecrets~ property for the current workstation, and
+resets its last-sync timestamp.
+** Installing the Homebrew bundle
+To run ~brew bundle install~ for the configured Brewfile, without running a
+full bootstrap:
+#+begin_src sh
+fun brew-bundle install
+#+end_src
+This runs the ~brew-bundle~ property for the current workstation, even when
+~brew bundle check~ reports the Brewfile is already satisfied.
 ** Working with the git home dir
 To start a shell with ~GIT_DIR~ set to the ~GitHomeDir~ property's git dir, so
 plain ~git~ commands operate on your home dir repo:

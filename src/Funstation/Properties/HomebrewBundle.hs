@@ -7,6 +7,7 @@
 module Funstation.Properties.HomebrewBundle where
 
 import Control.Monad.Except (throwError)
+import Control.Monad.Reader (asks)
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -35,7 +36,9 @@ instance Prop HomebrewBundleP where
         isRight <$> cmd (exe "brew" "bundle" "check" "--no-upgrade" ("--file=" <> T.unpack expandedBrewfile) &> devNull)
   fixer p = do
     expandedBrewfile <- expandPath p.brewfile
-    result <- runCmd ["brew", "bundle", "install", "--file=" <> expandedBrewfile] id
+    v <- asks (.opts.verbose)
+    let verboseFlag = ["--verbose" | v]
+    result <- runCmd (["brew", "bundle", "install"] <> verboseFlag <> ["--file=" <> expandedBrewfile]) id
     case result of
       Right _ -> putStrLn' "Homebrew bundle installed."
       Left err -> throwError $ WSFailure $ "brew bundle install failed: " <> tshow err

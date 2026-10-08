@@ -91,11 +91,21 @@ data GitHomeDirSubcommand
   = GitHomeDirShell
   deriving (Show)
 
+data BitwardenSecretsSubcommand
+  = BitwardenSecretsSync
+  deriving (Show)
+
+data BrewBundleSubcommand
+  = BrewBundleInstall
+  deriving (Show)
+
 data Command
   = Bootstrap
   | Nix NixSubcommand
   | HomeManagerCmd HomeManagerSubcommand
   | GitHomeDirCmd GitHomeDirSubcommand
+  | BitwardenSecretsCmd BitwardenSecretsSubcommand
+  | BrewBundleCmd BrewBundleSubcommand
   | Status
   deriving (Show)
 

@@ -17,12 +17,12 @@ import Funstation.Properties.HasGit ()
 import Funstation.Properties.GitHomeDir (resolveGitDir, GitHomeDirP(..))
 import Funstation.Properties.XCodeCLITools ()
 import Funstation.Properties.Homebrew ()
-import Funstation.Properties.HomebrewBundle ()
+import Funstation.Properties.HomebrewBundle (HomebrewBundleP)
 import Funstation.Properties.AptUpdate ()
 import Funstation.Properties.CoreDependencies
 import Funstation.Properties.NixDaemon ()
 import Funstation.Properties.HomeManager (HomeManagerP)
-import Funstation.Properties.BitwardenSecrets ()
+import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP)
 import Funstation.Properties.Sudoers ()
 
 import Options.Applicative
@@ -79,6 +79,12 @@ unknownPropertyError n known =
 homeManagerProps :: [Property] -> [HomeManagerP]
 homeManagerProps props = [ p | HomeManager p <- props ]
 
+bitwardenSecretsProps :: [Property] -> [BitwardenSecretsP]
+bitwardenSecretsProps props = [ p | BitwardenSecrets p <- props ]
+
+brewBundleProps :: [Property] -> [HomebrewBundleP]
+brewBundleProps props = [ p | HomebrewBundle p <- props ]
+
 gitHomeDirProps :: [Property] -> [GitHomeDirP]
 gitHomeDirProps = mapMaybe asGitHomeDir
  where
@@ -122,6 +128,22 @@ gitHomeDirSubcommandParser = subparser
     )
   )
 
+bitwardenSecretsSubcommandParser :: Parser BitwardenSecretsSubcommand
+bitwardenSecretsSubcommandParser = subparser
+  ( App.command "sync"
+    ( info (pure BitwardenSecretsSync <**> helper)
+      ( progDesc "Sync secrets from the Bitwarden vault, regardless of when they were last synced" )
+    )
+  )
+
+brewBundleSubcommandParser :: Parser BrewBundleSubcommand
+brewBundleSubcommandParser = subparser
+  ( App.command "install"
+    ( info (pure BrewBundleInstall <**> helper)
+      ( progDesc "Run brew bundle install for the configured Brewfile" )
+    )
+  )
+
 commandParser :: Parser Command
 commandParser = subparser
   ( App.command "bootstrap"
@@ -139,6 +161,14 @@ commandParser = subparser
  <> App.command "git-home-dir"
     ( info (GitHomeDirCmd <$> gitHomeDirSubcommandParser <**> helper)
       ( progDesc "git home dir utilities" )
+    )
+ <> App.command "bitwarden-secrets"
+    ( info (BitwardenSecretsCmd <$> bitwardenSecretsSubcommandParser <**> helper)
+      ( progDesc "Bitwarden secrets utilities" )
+    )
+ <> App.command "brew-bundle"
+    ( info (BrewBundleCmd <$> brewBundleSubcommandParser <**> helper)
+      ( progDesc "Homebrew bundle utilities" )
     )
  <> App.command "status"
     ( info (pure Status <**> helper)
@@ -335,6 +365,8 @@ main = do
     Nix NixRestart -> doNixRestart opts ws os
     HomeManagerCmd HomeManagerRebuild -> doHomeManagerRebuild opts ws os cfg
     GitHomeDirCmd GitHomeDirShell -> doGitHomeDirShell ws cfg
+    BitwardenSecretsCmd BitwardenSecretsSync -> doBitwardenSecretsSync opts ws os cfg
+    BrewBundleCmd BrewBundleInstall -> doBrewBundleInstall opts ws os cfg
     Status -> doStatus opts ws os cfg
 
   -- Clean up sudo refresh thread
@@ -384,6 +416,34 @@ main = do
       hms -> do
         result <-
           runExceptT (runReaderT (forM_ hms fixer) (settings opts ws os))
+        failLeft result
+
+  -- Sync Bitwarden secrets unconditionally: unlike bootstrap, this skips the
+  -- checker, so the sync runs regardless of when it last ran.
+  doBitwardenSecretsSync opts ws os cfg = do
+    props <- resolveProps ws cfg
+    case bitwardenSecretsProps props of
+      [] -> do
+        putStrLn $ "fun: error: no BitwardenSecrets property configured for workstation "
+                <> T.unpack (unWorkstationName ws)
+        exitFailure
+      bws -> do
+        result <-
+          runExceptT (runReaderT (forM_ bws fixer) (settings opts ws os))
+        failLeft result
+
+  -- Run brew bundle install unconditionally: unlike bootstrap, this skips the
+  -- checker, so the install runs even when the Brewfile already looks satisfied.
+  doBrewBundleInstall opts ws os cfg = do
+    props <- resolveProps ws cfg
+    case brewBundleProps props of
+      [] -> do
+        putStrLn $ "fun: error: no brew-bundle property configured for workstation "
+                <> T.unpack (unWorkstationName ws)
+        exitFailure
+      bbs -> do
+        result <-
+          runExceptT (runReaderT (forM_ bbs fixer) (settings opts ws os))
         failLeft result
 
   -- Start $SHELL (falling back to /bin/sh) with GIT_DIR pointing at the

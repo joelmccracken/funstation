@@ -8,6 +8,7 @@ import Data.Text (Text)
 import Funstation
   ( resolvePropertiesFor
   , homeManagerProps
+  , brewBundleProps
   , Configuration(..)
   , Workstation(..)
   , NamedProperty(..)
@@ -15,6 +16,7 @@ import Funstation
   )
 import Funstation.Properties.BitwardenSecrets (BitwardenSecretsP(..))
 import Funstation.Properties.HomeManager (HomeManagerP(..))
+import Funstation.Properties.HomebrewBundle (HomebrewBundleP(..))
 
 -- Use BitwardenSecrets entries whose syncIntervalDays acts as a distinguishable label,
 -- so we can assert both selection and ordering.
@@ -64,3 +66,11 @@ spec = do
 
     it "is empty when the workstation configures no home-manager" $
       homeManagerProps [bw 1] `shouldSatisfy` null
+
+  describe "brewBundleProps" $ do
+    it "picks out the brew-bundle properties, in order" $
+      map brewfile (brewBundleProps [bw 1, HomebrewBundle (HomebrewBundleP "~/a"), bw 2, HomebrewBundle (HomebrewBundleP "~/b")])
+        `shouldBe` ["~/a", "~/b"]
+
+    it "is empty when the workstation configures no brew-bundle" $
+      brewBundleProps [bw 1] `shouldSatisfy` null
