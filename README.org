@@ -98,6 +98,11 @@ fun home-manager rebuild
 #+end_src
 This builds and runs the activation script for the ~HomeManager~ property
 for the current workstation.
+
+For reference, the output executed by this property:
+#+begin_src sh
+cd the/nix/dir; nix run ".#homeConfigurations.\"${USER}@${WORKSTATION_NAME}\".activationPackage"
+#+end_src
 ** Syncing Bitwarden secrets
 Bootstrap only re-syncs Bitwarden secrets once ~syncIntervalDays~ have passed.
 To sync them now, regardless of when they were last synced:
