@@ -94,6 +94,7 @@ getProp (HomeManager p) = IsProp p
 getProp (HomebrewBundle p) = IsProp p
 getProp (BitwardenSecrets p) = IsProp p
 getProp (Sudoers p) = IsProp p
+getProp (ShellCommand p) = IsProp p
 
 bootstrapParser :: Parser Command
 bootstrapParser = pure Bootstrap

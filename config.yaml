@@ -14,6 +14,15 @@ properties:
       filename: funstation   # optional; must not contain '.' or end in '~'
       content: |
         $USER ALL=(ALL) NOPASSWD: ALL
+  # Runs `checker` with bash; if it exits non-zero, runs `fixer`. Runs
+  # `checker` again to confirm the fix took (set `verify: false` to skip that).
+  - name: local-bin-dir
+    type: ShellCommand
+    params:
+      desc: "~/.local/bin exists"   # optional; shown while the property runs
+      checker: test -d ~/.local/bin
+      fixer: mkdir -p ~/.local/bin
+      # verify: false               # for fixers the checker can't see yet
   - name: home-dotfiles
     type: GitHomeDir
     params:
