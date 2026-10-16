@@ -176,11 +176,10 @@ parseItems = eitherDecode
 findOrCreateFilesFolder :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m Text
 findOrCreateFilesFolder = do
   bs <- orFail "bw list folders failed" $ bwCmd ["list", "folders", "--search", filesFolderName]
-  case parseFolders bs of
-    Left err -> wsFail $ "Failed to parse folders JSON: " <> T.pack err
-    Right folders -> case filter (\f -> f.name == filesFolderName) folders of
-      (f:_) -> return f.id
-      []    -> createFilesFolder
+  folders <- orFail' "Failed to parse folders JSON" $ parseFolders bs
+  case filter (\f -> f.name == filesFolderName) folders of
+    (f:_) -> return f.id
+    []    -> createFilesFolder
   where
     createFilesFolder :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m Text
     createFilesFolder = do
@@ -189,9 +188,8 @@ findOrCreateFilesFolder = do
       -- --nointeraction is spelled out on each.
       let script = "NODE_OPTIONS='--no-deprecation' printf '%s' '{\"name\":\"bww_files\"}' | bw --nointeraction encode | bw --nointeraction create folder"
       bs <- orFail "bw create folder failed" $ runCmd ["bash", "-c", script] (|> captureTrim)
-      case parseFolder bs of
-        Left err -> wsFail $ "Failed to parse folder creation response: " <> T.pack err
-        Right f  -> return f.id
+      f <- orFail' "Failed to parse folder creation response" $ parseFolder bs
+      return f.id
 
 -- | Write each file item to disk.
 -- Lock the files to 0600.
@@ -254,9 +252,7 @@ instance Prop BitwardenSecretsP where
 
       -- list all bww items
       itemsBs <- orFail "bw list items failed" $ bwCmd ["list", "items", "--folderid", folderId]
-      items <- case parseItems itemsBs of
-        Left err -> wsFail $ "Failed to parse items JSON: " <> T.pack err
-        Right is -> return is
+      items <- orFail' "Failed to parse items JSON" $ parseItems itemsBs
 
       -- save all bww items to disk
       let targets = fileItemTargets items

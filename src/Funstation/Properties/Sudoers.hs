@@ -43,9 +43,8 @@ sudoersDir = "/etc/sudoers.d"
 sudoersPath :: MonadError WSError m => SudoersP -> m Text
 sudoersPath p = do
   let name = fromMaybe defaultSudoersFilename p.filename
-  case validateSudoersFilename name of
-    Left err -> wsFail err
-    Right () -> pure $ sudoersDir <> "/" <> name
+  either wsFail pure $ validateSudoersFilename name
+  pure $ sudoersDir <> "/" <> name
 
 validateSudoersFilename :: Text -> Either Text ()
 validateSudoersFilename name

@@ -2,6 +2,7 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Funstation.Commands where
 
@@ -237,14 +238,30 @@ tshow :: Show s => s -> Text
 tshow = T.pack . show
 
 -- | Abort the run with a message.
+--
+-- Deliberately monomorphic: generalising this over 'AsErrorText' would make
+-- @wsFail "some literal"@ ambiguous under @OverloadedStrings@.
 wsFail :: MonadError WSError m => Text -> m a
 wsFail = throwError . WSFailure
 
--- | Run a command, aborting the run when it exits non-zero. The message
--- describes what was being attempted; the underlying failure is appended.
-orFail :: MonadError WSError m => Text -> m (Either Failure a) -> m a
-orFail what act = act >>= either failed pure
-  where failed e = wsFail $ what <> ": " <> tshow e
+-- | Error payloads that can be reported to the user: shh's 'Failure', aeson's
+-- decode errors, or plain 'Text'.
+class AsErrorText e where
+  errorText :: e -> Text
+
+instance AsErrorText Text where errorText = id
+instance AsErrorText String where errorText = T.pack
+instance AsErrorText Failure where errorText = tshow
+
+-- | Unwrap an 'Either', aborting the run when it is 'Left'. The message
+-- describes what was being attempted; the payload is appended.
+orFail' :: (AsErrorText e, MonadError WSError m) => Text -> Either e a -> m a
+orFail' what = either failed pure
+  where failed e = wsFail $ what <> ": " <> errorText e
+
+-- | 'orFail'' for a command that produces its result in the monad.
+orFail :: (AsErrorText e, MonadError WSError m) => Text -> m (Either e a) -> m a
+orFail what act = act >>= orFail' what
 
 putStrLn' :: MonadIO m => Text -> m ()
 putStrLn' t = liftIO $ putStrLn $ T.unpack t
