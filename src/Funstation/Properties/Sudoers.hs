@@ -6,7 +6,7 @@
 
 module Funstation.Properties.Sudoers where
 
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (asks)
 import Data.Either (isRight)
@@ -44,7 +44,7 @@ sudoersPath :: MonadError WSError m => SudoersP -> m Text
 sudoersPath p = do
   let name = fromMaybe defaultSudoersFilename p.filename
   case validateSudoersFilename name of
-    Left err -> throwError $ WSFailure err
+    Left err -> wsFail err
     Right () -> pure $ sudoersDir <> "/" <> name
 
 validateSudoersFilename :: Text -> Either Text ()
@@ -75,7 +75,7 @@ instance Prop SudoersP where
   fixer p = do
     os <- asks (.os)
     case os of
-      NixOS -> throwError $ WSFailure "sudoers is managed declaratively on NixOS; this property should never run its fixer here"
+      NixOS -> wsFail "sudoers is managed declaratively on NixOS; this property should never run its fixer here"
       _ -> do
         path <- sudoersPath p
         expanded <- expandText p.content

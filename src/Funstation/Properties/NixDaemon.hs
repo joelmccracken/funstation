@@ -6,7 +6,6 @@
 
 module Funstation.Properties.NixDaemon where
 
-import Control.Monad.Except (throwError)
 import Control.Monad.Reader (asks)
 import Funstation.Types
 import Funstation.Commands
@@ -56,7 +55,7 @@ instance Prop NixDaemonP where
   fixer p = do
     os <- asks (.os)
     when (os == NixOS) $
-      throwError $ WSFailure "Nix is managed declaratively on NixOS; this property should never run its fixer here"
+      wsFail "Nix is managed declaratively on NixOS; this property should never run its fixer here"
 
     -- Check if Nix is already installed
     nixInstalled <- hasCmd' "nix"
@@ -79,15 +78,12 @@ instance Prop NixDaemonP where
         putStrLn' $ "Installing Nix " <> ver <> "..."
 
         let installCmd = "curl -L " <> installerUrl <> " | sh -s -- --daemon" <> yesFlag
-        result <- runCmd ["bash", "-c", installCmd] id
-        case result of
-          Left err -> throwError $ WSFailure $ "Nix installation failed: " <> tshow err
-          Right _ -> pure ()
+        orFail "Nix installation failed" $ runCmd ["bash", "-c", installCmd] id
 
         -- Verify profile exists
         profileExists <- fileExists (T.pack nixDaemonProfile)
         unless profileExists $
-          throwError $ WSFailure $ "Nix installed, but cannot find profile file: " <> T.pack nixDaemonProfile
+          wsFail $ "Nix installed, but cannot find profile file: " <> T.pack nixDaemonProfile
 
         putStrLn' ""
         putStrLn' "Nix installed. Add the following to your shell profile:"

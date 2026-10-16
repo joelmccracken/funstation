@@ -7,7 +7,6 @@
 
 module Funstation.Properties.GitClone (GitCloneP(..)) where
 
-import Control.Monad.Except (throwError)
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -43,9 +42,8 @@ instance Prop GitCloneP where
   fixer p = do
     expandedPath <- expandPath p.path
     let branchArgs = maybe [] (\b -> ["--branch", b]) p.branch
-    result <- runCmd (["git", "clone"] ++ branchArgs ++ [p.repoUrl, expandedPath]) id
-    case result of
-      Right _  -> putStrLn' $ "Cloned " <> p.repoUrl <> " to " <> p.path
-      Left err -> throwError $ WSFailure $ "Failed to clone repository: " <> tshow err
+    orFail "Failed to clone repository" $
+      runCmd (["git", "clone"] ++ branchArgs ++ [p.repoUrl, expandedPath]) id
+    putStrLn' $ "Cloned " <> p.repoUrl <> " to " <> p.path
 
   dependencies _ = return [IsProp HasGitP]

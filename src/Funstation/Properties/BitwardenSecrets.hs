@@ -29,7 +29,7 @@ import Data.Maybe (mapMaybe)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Control.Monad (forM_, void)
 import Control.Monad.Catch (MonadMask, bracket)
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader)
 
@@ -86,9 +86,9 @@ readCredFile :: (MonadIO m, MonadError WSError m) => FilePath -> m Text
 readCredFile path = do
   contents <- readFileIfExists path
   case contents of
-    Nothing -> throwError $ WSFailure $ "Missing Bitwarden credential file: " <> T.pack path
+    Nothing -> wsFail $ "Missing Bitwarden credential file: " <> T.pack path
     Just c
-      | T.null c  -> throwError $ WSFailure $ "Bitwarden credential file is empty: " <> T.pack path
+      | T.null c  -> wsFail $ "Bitwarden credential file is empty: " <> T.pack path
       | otherwise -> return c
 
 -- ---------------------------------------------------------------------------
@@ -175,14 +175,12 @@ parseItems = eitherDecode
 -- Requires an unlocked vault (i.e. @BW_SESSION@ already set).
 findOrCreateFilesFolder :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m Text
 findOrCreateFilesFolder = do
-  foldersResult <- bwCmd ["list", "folders", "--search", filesFolderName]
-  case foldersResult of
-    Left err -> throwError $ WSFailure $ "bw list folders failed: " <> tshow err
-    Right bs -> case parseFolders bs of
-      Left err -> throwError $ WSFailure $ "Failed to parse folders JSON: " <> T.pack err
-      Right folders -> case filter (\f -> f.name == filesFolderName) folders of
-        (f:_) -> return f.id
-        []    -> createFilesFolder
+  bs <- orFail "bw list folders failed" $ bwCmd ["list", "folders", "--search", filesFolderName]
+  case parseFolders bs of
+    Left err -> wsFail $ "Failed to parse folders JSON: " <> T.pack err
+    Right folders -> case filter (\f -> f.name == filesFolderName) folders of
+      (f:_) -> return f.id
+      []    -> createFilesFolder
   where
     createFilesFolder :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => m Text
     createFilesFolder = do
@@ -190,12 +188,10 @@ findOrCreateFilesFolder = do
       -- Not routed through bwCmd because it pipes two bw calls together, so
       -- --nointeraction is spelled out on each.
       let script = "NODE_OPTIONS='--no-deprecation' printf '%s' '{\"name\":\"bww_files\"}' | bw --nointeraction encode | bw --nointeraction create folder"
-      createResult <- runCmd ["bash", "-c", script] (|> captureTrim)
-      case createResult of
-        Left err -> throwError $ WSFailure $ "bw create folder failed: " <> tshow err
-        Right bs -> case parseFolder bs of
-          Left err -> throwError $ WSFailure $ "Failed to parse folder creation response: " <> T.pack err
-          Right f  -> return f.id
+      bs <- orFail "bw create folder failed" $ runCmd ["bash", "-c", script] (|> captureTrim)
+      case parseFolder bs of
+        Left err -> wsFail $ "Failed to parse folder creation response: " <> T.pack err
+        Right f  -> return f.id
 
 -- | Write each file item to disk.
 -- Lock the files to 0600.
@@ -245,29 +241,22 @@ instance Prop BitwardenSecretsP where
     -- Unlock vault, capture session token
     -- session token is what acts like a "key" for the remaining commands
     putStrLn' "  Unlocking Bitwarden vault..."
-    tokenResult <- bwCmd ["unlock", "--passwordfile", T.pack creds.masterPassFile, "--raw"]
-    token <- case tokenResult of
-      Left err -> throwError $ WSFailure $ "bw unlock failed: " <> tshow err
-      Right t  -> return $ TL.unpack $ TL.decodeUtf8 t
+    token <- TL.unpack . TL.decodeUtf8
+      <$> orFail "bw unlock failed" (bwCmd ["unlock", "--passwordfile", T.pack creds.masterPassFile, "--raw"])
 
     -- Set BW_SESSION for all subsequent bw calls
     withEnvVar "BW_SESSION" token $ do
       -- Sync vault, make sure local data is fresh
       putStrLn' "  Syncing Bitwarden vault..."
-      syncResult <- bwCmd ["sync"]
-      case syncResult of
-        Left err -> throwError $ WSFailure $ "bw sync failed: " <> tshow err
-        Right _  -> return ()
+      void $ orFail "bw sync failed" $ bwCmd ["sync"]
 
       folderId <- findOrCreateFilesFolder
 
       -- list all bww items
-      itemsResult <- bwCmd ["list", "items", "--folderid", folderId]
-      items <- case itemsResult of
-        Left err -> throwError $ WSFailure $ "bw list items failed: " <> tshow err
-        Right bs -> case parseItems bs of
-          Left err -> throwError $ WSFailure $ "Failed to parse items JSON: " <> T.pack err
-          Right is -> return is
+      itemsBs <- orFail "bw list items failed" $ bwCmd ["list", "items", "--folderid", folderId]
+      items <- case parseItems itemsBs of
+        Left err -> wsFail $ "Failed to parse items JSON: " <> T.pack err
+        Right is -> return is
 
       -- save all bww items to disk
       let targets = fileItemTargets items

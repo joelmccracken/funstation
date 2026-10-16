@@ -6,7 +6,6 @@
 
 module Funstation.Properties.HomeManager where
 
-import Control.Monad.Except (throwError)
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -88,10 +87,7 @@ instance Prop HomeManagerP where
               <> "cd " <> expandedDir
               <> " && nix -v -L --show-trace run "
               <> flakeOut
-    result <- runCmd ["bash", "-c", runCmd'] id
-    either
-      (\err-> throwError $ WSFailure $ "Home Manager activation failed: " <> tshow err)
-      (const $ putStrLn' "Home Manager configuration activated.")
-      result
+    orFail "Home Manager activation failed" $ runCmd ["bash", "-c", runCmd'] id
+    putStrLn' "Home Manager configuration activated."
 
   dependencies _ = return []

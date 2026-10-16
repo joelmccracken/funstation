@@ -7,7 +7,7 @@
 
 module Funstation.Properties.Dotfiles where
 
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError)
 import Control.Monad.Reader (MonadReader)
 import Control.Monad.IO.Class (MonadIO)
 import Funstation.Types
@@ -158,7 +158,7 @@ instance Prop DotfilesP where
       (src, dest) <- computeDotfilePaths p f
       diff <- computeDotfileDiff f src dest
       case diff of
-        DotfileSrcMissing path -> throwError $ WSFailure $ "Source file does not exist: " <> path
+        DotfileSrcMissing path -> wsFail $ "Source file does not exist: " <> path
         DotfileCorrect -> pure True
         _ -> pure False
     return $ all id results
@@ -168,7 +168,7 @@ instance Prop DotfilesP where
       (src, dest) <- computeDotfilePaths p f
       diff <- computeDotfileDiff f src dest
       case diff of
-        DotfileSrcMissing path -> throwError $ WSFailure $ "Source file does not exist: " <> path
+        DotfileSrcMissing path -> wsFail $ "Source file does not exist: " <> path
         DotfileCorrect -> pure ()
         _ -> applyDotfileFix f src dest diff
 

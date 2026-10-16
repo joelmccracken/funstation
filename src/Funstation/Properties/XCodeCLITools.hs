@@ -6,7 +6,6 @@
 
 module Funstation.Properties.XCodeCLITools where
 
-import Control.Monad.Except (throwError)
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -38,7 +37,7 @@ instance Prop XCodeCLIToolsP where
       void $ runCmd ["rm", "-f", "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"] id
 
       case result of
-        Left err -> throwError $ WSFailure $ "Failed to install Xcode CLI tools: " <> tshow err
+        Left err -> wsFail $ "Failed to install Xcode CLI tools: " <> tshow err
         Right _ -> putStrLn' "Xcode CLI tools installed successfully"
 
   dependencies _ = return []

@@ -29,12 +29,11 @@ import Funstation.Proc
 
 detectOS :: (MonadIO m, MonadError WSError m) => m OS
 detectOS = do
-  osCheck  <- cmd (exe "uname" "-s" |> captureTrim)
+  osCheck <- orFail "error detecting OS" $ cmd (exe "uname" "-s" |> captureTrim)
   case osCheck of
-    Left e -> throwError $ WSFailure $ "error detecting OS: " <> tshow e
-    Right "Darwin" -> return MacOS
-    Right "Linux" -> detectLinuxOS
-    Right _ -> return Unknown
+    "Darwin" -> return MacOS
+    "Linux" -> detectLinuxOS
+    _ -> return Unknown
 
 detectLinuxOS :: MonadIO m => m OS
 detectLinuxOS = do
@@ -83,11 +82,9 @@ ensureParentDir :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => 
 ensureParentDir path = do
   let parentDir = T.pack $ takeDirectory (T.unpack path)
   exists <- dirExists parentDir
-  unless exists $ do
-    result <- privCmd WriteAccess parentDir ["mkdir", "-p", parentDir]
-    case result of
-      Right _ -> pure ()
-      Left err -> throwError $ WSFailure $ "Failed to create directory " <> parentDir <> ": " <> tshow err
+  unless exists $
+    orFail ("Failed to create directory " <> parentDir) $
+      privCmd WriteAccess parentDir ["mkdir", "-p", parentDir]
 
 -- | Get "owner:group" for a path, for use with chown.
 getOwnerGroup :: MonadIO m => Text -> m Text
@@ -129,45 +126,39 @@ mvToBackupAuto path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
   -- rename; write is to the directory, not files themselves
-  result <- privCmdFor [(EntryAccess, path), (EntryAccess, backupPath)]
-              ["mv", path, backupPath]
-  case result of
-    Right _ -> do
-      putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
-      pure backupPath
-    Left err -> throwError $ WSFailure $ "Failed to backup file: " <> tshow err
+  orFail "Failed to backup file" $
+    privCmdFor [(EntryAccess, path), (EntryAccess, backupPath)] ["mv", path, backupPath]
+  putStrLn' $ "  Backed up " <> path <> " to " <> backupPath
+  pure backupPath
 
 -- | Check if a file has the desired contents.
 -- Returns True if the file exists and matches, False otherwise.
 fileContentsCheck :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> Text -> m Bool
 fileContentsCheck path content = do
   -- Create temp file with desired content
-  tempFileResult <- cmd (exe "mktemp" |> captureTrim)
-  case tempFileResult of
-    Left err -> throwError $ WSFailure $ "Failed to create temp file: " <> tshow err
-    Right tempFileBytes -> do
-      let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
+  tempFileBytes <- orFail "Failed to create temp file" $ cmd (exe "mktemp" |> captureTrim)
+  let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
 
-      -- Write desired content to temp file
-      liftIO $ TIO.writeFile tempFile content
+  -- Write desired content to temp file
+  liftIO $ TIO.writeFile tempFile content
 
-      -- Check if target file exists
-      targetExists <- fileExists path
+  -- Check if target file exists
+  targetExists <- fileExists path
 
-      result <- if not targetExists
-        then pure False  -- Target doesn't exist, needs fixing
-        else do
-          -- Compare using diff (only need read access to target file)
-          sc <- asks (.sudoCmd)
-          diffCmd <- liftIO $ mkPrivCmd sc ReadAccess path ["diff", "-q", T.pack tempFile, path]
-          diffResult <- cmd $ exe (T.encodeUtf8 <$> diffCmd)  &> devNull
-          pure $ isRight diffResult
+  result <- if not targetExists
+    then pure False  -- Target doesn't exist, needs fixing
+    else do
+      -- Compare using diff (only need read access to target file)
+      sc <- asks (.sudoCmd)
+      diffCmd <- liftIO $ mkPrivCmd sc ReadAccess path ["diff", "-q", T.pack tempFile, path]
+      diffResult <- cmd $ exe (T.encodeUtf8 <$> diffCmd)  &> devNull
+      pure $ isRight diffResult
 
-      -- Clean up temp file
-      -- TODO bracket to clean up
-      void $ cmd $ exe ["rm", "-f", tempFile]
+  -- Clean up temp file
+  -- TODO bracket to clean up
+  void $ cmd $ exe ["rm", "-f", tempFile]
 
-      pure result
+  pure result
 
 -- | Options for 'fileContentsFixWith'.
 data FixOpts m = FixOpts
@@ -196,59 +187,64 @@ fileContentsFixWith opts path content = do
     then pure Nothing  -- No change needed
     else do
       -- Create temp file with desired content
-      tempFileResult <- cmd (exe "mktemp" |> captureTrim)
-      case tempFileResult of
-        Left err -> throwError $ WSFailure $ "Failed to create temp file: " <> tshow err
-        Right tempFileBytes -> do
-          let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
-              tempFileT = T.pack tempFile
+      tempFileBytes <- orFail "Failed to create temp file" $ cmd (exe "mktemp" |> captureTrim)
+      let tempFile = TL.unpack $ TL.decodeUtf8 tempFileBytes
+          tempFileT = T.pack tempFile
 
-          -- Write desired content to temp file
-          liftIO $ TIO.writeFile tempFile content
+      -- Write desired content to temp file
+      liftIO $ TIO.writeFile tempFile content
 
-          -- Validate the new contents before touching the target
-          case opts.validate of
-            Nothing -> pure ()
-            Just v -> do
-              valid <- v tempFile
-              unless valid $ do
-                void $ cmd $ exe ["rm", "-f", tempFile]
-                throwError $ WSFailure $ "New contents for " <> path <> " failed validation; left unchanged"
+      -- Validate the new contents before touching the target
+      case opts.validate of
+        Nothing -> pure ()
+        Just v -> do
+          valid <- v tempFile
+          unless valid $ do
+            void $ cmd $ exe ["rm", "-f", tempFile]
+            wsFail $ "New contents for " <> path <> " failed validation; left unchanged"
 
-          -- Check if target exists; capture owner/mode info before any changes
-          targetExists <- fileExists path
-          (ownerGroup, mode) <- if targetExists
-            then (,) <$> getOwnerGroup path <*> getMode path
-            else (,) <$> getOwnerGroup (T.pack $ takeDirectory (T.unpack path)) <*> pure (fromMaybe "644" opts.newMode)
+      -- Check if target exists; capture owner/mode info before any changes
+      targetExists <- fileExists path
+      (ownerGroup, mode) <- if targetExists
+        then (,) <$> getOwnerGroup path <*> getMode path
+        else (,) <$> getOwnerGroup (T.pack $ takeDirectory (T.unpack path)) <*> pure (fromMaybe "644" opts.newMode)
 
-          -- Give the temp file the target's mode and ownership before moving
-          -- it in, so the target never exists with the wrong ones
-          tempMode <- getMode tempFileT
-          when (tempMode /= mode) $
-            void $ privCmd ModeAccess tempFileT ["chmod", mode, tempFileT]
-          tempOwnerGroup <- getOwnerGroup tempFileT
-          when (tempOwnerGroup /= ownerGroup) $
-            void $ privCmd OwnerAccess tempFileT ["chown", ownerGroup, tempFileT]
+      -- Give the temp file the target's mode and ownership before moving
+      -- it in, so the target never exists with the wrong ones
+      tempMode <- getMode tempFileT
+      when (tempMode /= mode) $
+        void $ privCmd ModeAccess tempFileT ["chmod", mode, tempFileT]
+      tempOwnerGroup <- getOwnerGroup tempFileT
+      when (tempOwnerGroup /= ownerGroup) $
+        void $ privCmd OwnerAccess tempFileT ["chown", ownerGroup, tempFileT]
 
-          -- Back up existing file if present
-          backupPath <- if targetExists
-            then mvToBackupAuto path
-            else pure ""
+      -- Back up existing file if present
+      backupPath <- if targetExists
+        then mvToBackupAuto path
+        else pure ""
 
-          -- Move temp file to target location
-          -- may need owner change, so check EntryAccess, etc
-          moveResult <- privCmdFor [(EntryAccess, tempFileT), (EntryAccess, path), (ModeAccess, tempFileT)]
-                          ["mv", tempFileT, path]
-          case moveResult of
-            Left err -> throwError $ WSFailure $ "Failed to move file to " <> path <> ": " <> tshow err
-            Right _ -> pure ()
+      -- Move temp file to target location
+      -- may need owner change, so check EntryAccess, etc
+      orFail ("Failed to move file to " <> path) $
+        privCmdFor [(EntryAccess, tempFileT), (EntryAccess, path), (ModeAccess, tempFileT)]
+          ["mv", tempFileT, path]
 
-          pure $ Just backupPath
+      pure $ Just backupPath
 
 -- Primitive WS utilities
 
 tshow :: Show s => s -> Text
 tshow = T.pack . show
+
+-- | Abort the run with a message.
+wsFail :: MonadError WSError m => Text -> m a
+wsFail = throwError . WSFailure
+
+-- | Run a command, aborting the run when it exits non-zero. The message
+-- describes what was being attempted; the underlying failure is appended.
+orFail :: MonadError WSError m => Text -> m (Either Failure a) -> m a
+orFail what act = act >>= either failed pure
+  where failed e = wsFail $ what <> ": " <> tshow e
 
 putStrLn' :: MonadIO m => Text -> m ()
 putStrLn' t = liftIO $ putStrLn $ T.unpack t
@@ -280,21 +276,16 @@ expandText text = do
   let endsInNewline = "\n" `T.isSuffixOf` text
       body = if endsInNewline then text else text <> "\n"
       script = "set -u\ncat <<FUNSTATION_EOF\n" <> body <> "FUNSTATION_EOF\n"
-  result <- cmd (exe "bash" "-c" (T.unpack script) |> capture)
-  case result of
-    Left err -> throwError $ WSFailure $ "Failed to expand text: " <> tshow err
-    Right bytes -> do
-      let expanded = TL.toStrict $ TL.decodeUtf8 bytes
-      pure $ if endsInNewline then expanded else fromMaybe expanded (T.stripSuffix "\n" expanded)
+  bytes <- orFail "Failed to expand text" $ cmd (exe "bash" "-c" (T.unpack script) |> capture)
+  let expanded = TL.toStrict $ TL.decodeUtf8 bytes
+  pure $ if endsInNewline then expanded else fromMaybe expanded (T.stripSuffix "\n" expanded)
 
 mvToBackup :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m ()
 mvToBackup path = do
   timestamp <- liftIO $ round <$> getPOSIXTime
   let backupPath = path <> "." <> T.pack (show (timestamp :: Integer))
-  result <- runCmd ["mv", path, backupPath] (&> devNull)
-  case result of
-    Right _ -> putStrLn' $ "Moved " <> path <> " to " <> backupPath
-    Left err -> throwError $ WSFailure $ "Failed to move file: " <> tshow err
+  orFail "Failed to move file" $ runCmd ["mv", path, backupPath] (&> devNull)
+  putStrLn' $ "Moved " <> path <> " to " <> backupPath
 
 -- | Install a package via Homebrew (@brew install \<package\>@).
 brewInstall :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> m (Either Failure ())
@@ -315,7 +306,7 @@ restartNixDaemon = do
       void $ runCmd ["sudo", "launchctl", "load", "/Library/LaunchDaemons/org.nixos.nix-daemon.plist"] id
     Debian -> systemdRestart "Debian"
     NixOS -> systemdRestart "NixOS"
-    Unknown -> throwError $ WSFailure "Cannot restart nix daemon: unknown OS"
+    Unknown -> wsFail "Cannot restart nix daemon: unknown OS"
   liftIO $ threadDelay 5000000
  where
   systemdRestart osName = do

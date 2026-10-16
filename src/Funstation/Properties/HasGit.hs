@@ -7,7 +7,6 @@
 
 module Funstation.Properties.HasGit where
 
-import Control.Monad.Except (throwError)
 import Control.Monad.Reader (asks)
 import Funstation.Types
 import Funstation.Commands
@@ -31,19 +30,15 @@ instance Prop HasGitP where
       -- On NixOS git is expected to be provided declaratively; no package-manager
       -- dependency to pull in.
       NixOS -> return []
-      Unknown -> throwError $ WSFailure "error: Unknown OS, unable to install git"
+      Unknown -> wsFail "error: Unknown OS, unable to install git"
   fixer _ = do
     os <- asks (.os)
     case os of
-      Unknown -> throwError $ WSFailure "error: Unknown OS, unable to install git"
-      NixOS -> throwError $ WSFailure "git not found on NixOS; declare it in configuration.nix (environment.systemPackages)"
+      Unknown -> wsFail "error: Unknown OS, unable to install git"
+      NixOS -> wsFail "git not found on NixOS; declare it in configuration.nix (environment.systemPackages)"
       MacOS -> do
-        result <- brewInstall "git"
-        case result of
-          Right _ -> putStrLn' "Git installed successfully"
-          Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
+        orFail "Failed to install git" $ brewInstall "git"
+        putStrLn' "Git installed successfully"
       Debian -> do
-        result <- aptInstall "git"
-        case result of
-          Right _ -> putStrLn' "Git installed successfully"
-          Left err -> throwError $ WSFailure $ "Failed to install git: " <> tshow err
+        orFail "Failed to install git" $ aptInstall "git"
+        putStrLn' "Git installed successfully"

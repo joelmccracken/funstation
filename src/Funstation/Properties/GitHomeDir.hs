@@ -7,7 +7,6 @@
 
 module Funstation.Properties.GitHomeDir where
 
-import Control.Monad.Except (throwError)
 import Funstation.Types
 import Funstation.Commands
 import Funstation.Proc
@@ -115,16 +114,13 @@ instance Prop GitHomeDirP where
 
     didInitializeGitDir <-
       if not gitDirExists then do
-        result <- runCmd ["git", "init", "--bare", expandedGitDir] id
-        case result of
-          Right _ -> do
-            void $ cmd $ exe $ T.encodeUtf8 <$>
-              ["git", "--git-dir", expandedGitDir, "config", "core.bare", "false"]
-            void $ cmd $ exe $ T.encodeUtf8 <$>
-              ["git", "--git-dir", expandedGitDir, "config", "core.worktree", expandedHomeDir]
-            putStrLn' $ "Initialized repo at " <> expandedGitDir
-            pure True
-          Left err -> throwError $ WSFailure $ "Failed to init bare repo: " <> tshow err
+        orFail "Failed to init bare repo" $ runCmd ["git", "init", "--bare", expandedGitDir] id
+        void $ cmd $ exe $ T.encodeUtf8 <$>
+          ["git", "--git-dir", expandedGitDir, "config", "core.bare", "false"]
+        void $ cmd $ exe $ T.encodeUtf8 <$>
+          ["git", "--git-dir", expandedGitDir, "config", "core.worktree", expandedHomeDir]
+        putStrLn' $ "Initialized repo at " <> expandedGitDir
+        pure True
       else pure False
 
     -- Step 2: configure remote (add or update)
@@ -142,10 +138,8 @@ instance Prop GitHomeDirP where
         pure True
 
     -- Step 3: fetch (always; errors out on failure)
-    fetchResult <- runCmd ["git", "--git-dir", expandedGitDir, "fetch", "origin"] id
-    case fetchResult of
-      Left err -> throwError $ WSFailure $ "Failed to fetch from remote: " <> tshow err
-      Right _  -> pure ()
+    orFail "Failed to fetch from remote" $
+      runCmd ["git", "--git-dir", expandedGitDir, "fetch", "origin"] id
 
     -- Step 4: ensure local branch exists and tracks remote
     let remoteBranch = "origin/" <> p.branch
@@ -165,34 +159,29 @@ instance Prop GitHomeDirP where
     unless homeDirExists $ mkDir expandedHomeDir
 
     -- Step 6: soft-checkout files missing from homeDir
-    lsResult <- gitLsTree expandedGitDir ("origin/" <> p.branch)
-    didChangeFiles <- case lsResult of
-      Left err -> throwError $ WSFailure $ "Failed to list tracked files: " <> tshow err
-      Right files -> do
-        forM files $ \f -> do
-          let destPath = expandedHomeDir <> "/" <> f
-          exists <- fileExists destPath
-          if exists then pure False else do
-            putStrLn' $ "Checking out missing file: " <> f
-            result <- runCmd ["bash", "-c", T.intercalate " "
-                                [ "cd ", expandedHomeDir, ";"
-                                , "git", "--git-dir", expandedGitDir
-                                , "--work-tree", expandedHomeDir
-                                , "checkout", "origin/" <> p.branch, "--", f]] id
-            case result of
-              Right _ -> pure True
-              Left err -> do
-                putStrLn' $ "Warning: failed to checkout " <> f <> ": " <> tshow err
-                pure False
+    files <- orFail "Failed to list tracked files" $
+      gitLsTree expandedGitDir ("origin/" <> p.branch)
+    didChangeFiles <- forM files $ \f -> do
+      let destPath = expandedHomeDir <> "/" <> f
+      exists <- fileExists destPath
+      if exists then pure False else do
+        putStrLn' $ "Checking out missing file: " <> f
+        result <- runCmd ["bash", "-c", T.intercalate " "
+                            [ "cd ", expandedHomeDir, ";"
+                            , "git", "--git-dir", expandedGitDir
+                            , "--work-tree", expandedHomeDir
+                            , "checkout", "origin/" <> p.branch, "--", f]] id
+        case result of
+          Right _ -> pure True
+          Left err -> do
+            putStrLn' $ "Warning: failed to checkout " <> f <> ": " <> tshow err
+            pure False
 
     -- Step 7: run post-change script if anything changed
     let didChange = (or [didInitializeGitDir, didSetRemoteUrl, any (==True) didChangeFiles])
     when didChange  $ forM_ p.runAfterChange $ \script -> do
       expandedScript <- expandPath script
       putStrLn' $ "Running post-change script: " <> expandedScript
-      result <- runCmd ["bash", expandedScript] id
-      case result of
-        Right _ -> pure ()
-        Left err -> throwError $ WSFailure $ "Post-change script failed: " <> tshow err
+      orFail "Post-change script failed" $ runCmd ["bash", expandedScript] id
 
   dependencies _ = return [IsProp HasGitP]

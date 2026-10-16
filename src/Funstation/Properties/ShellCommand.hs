@@ -6,7 +6,7 @@
 module Funstation.Properties.ShellCommand where
 
 import Control.Monad (unless, when)
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (MonadReader)
 import Data.Aeson.Types (FromJSON, ToJSON, parseJSON, toJSON, withObject, object, (.:), (.:?), (.!=), (.=))
@@ -61,11 +61,8 @@ instance Prop ShellCommandP where
   attrs p = Map.fromList [("checker", p.checkerCmd), ("fixer", p.fixerCmd)]
   checker p = isRight <$> runShell p.checkerCmd
   fixer p = do
-    result <- runShell p.fixerCmd
-    case result of
-      Left err -> throwError $ WSFailure $ "shell command fixer failed: " <> tshow err
-      Right () -> when p.verify $ do
-        ok <- isRight <$> runShell p.checkerCmd
-        unless ok $ throwError $ WSFailure $
-          "fixer for " <> desc p <> " exited 0 but its checker still fails"
+    orFail (desc p <> " fixer failed") $ runShell p.fixerCmd
+    when p.verify $ do
+      ok <- checker p
+      unless ok $ wsFail $ desc p <> " fixer exited 0 but its checker still fails"
   dependencies _ = return []
