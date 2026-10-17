@@ -25,9 +25,10 @@ import System.Environment (getEnv, setEnv, unsetEnv, lookupEnv)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
+import Numeric (readOct)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Control.Monad (forM_, void)
+import Control.Monad (forM, unless, void)
 import Control.Monad.Catch (MonadMask, bracket)
 import Control.Monad.Except (MonadError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -37,8 +38,17 @@ import Control.Monad.Reader (MonadReader)
 -- Data type
 
 data BitwardenSecretsP = BitwardenSecretsP
-  { syncIntervalDays :: Int  -- ^ How many days between re-syncs (default 7)
+  { syncIntervalDays :: Int         -- ^ How many days between re-syncs (default 7)
+  , mode             :: Maybe Text  -- ^ Octal mode for written secrets (default 'defaultSecretMode')
   } deriving (Eq, Show, Generic, FromJSON, ToJSON)
+
+-- | Mode written secrets get when the property sets none.
+defaultSecretMode :: Text
+defaultSecretMode = "700"
+
+-- | The mode written secrets should have.
+secretMode :: BitwardenSecretsP -> Text
+secretMode p = fromMaybe defaultSecretMode p.mode
 
 -- ---------------------------------------------------------------------------
 -- JSON types for bw CLI output
@@ -136,6 +146,40 @@ getLastSyncTs = readTimestamp . syncTsFile
 saveLastSyncTs :: MonadIO m => FilePath -> m ()
 saveLastSyncTs = writeTimestamp . syncTsFile
 
+-- | Paths of the files written by the last sync, one per line.
+writtenFilesFile :: FilePath -> FilePath
+writtenFilesFile home = stateFile home ("bitwarden-secrets" </> "written-files")
+
+-- | Paths written by the last sync; empty when never synced.
+getWrittenFiles :: MonadIO m => FilePath -> m [Text]
+getWrittenFiles home =
+  maybe [] (filter (not . T.null) . T.lines) <$> readStateFile (writtenFilesFile home)
+
+-- | Record the paths written by a sync, replacing the previous list.
+saveWrittenFiles :: MonadIO m => FilePath -> [Text] -> m ()
+saveWrittenFiles home = writeStateFile (writtenFilesFile home) . T.unlines
+
+-- | True when two octal mode strings name the same mode, so @"0700"@ and
+-- @"700"@ compare equal. Unparseable modes never match.
+sameMode :: Text -> Text -> Bool
+sameMode a b = case (parse a, parse b) of
+  (Just x, Just y) -> x == y
+  _                -> False
+  where
+    parse :: Text -> Maybe Integer
+    parse t = case readOct (T.unpack t) of
+      [(n, "")] -> Just n
+      _         -> Nothing
+
+-- | True when every path exists and has the given mode.
+filesHaveMode :: MonadIO m => Text -> [Text] -> m Bool
+filesHaveMode wanted paths = and <$> mapM hasMode paths
+  where
+    hasMode path = do
+      exists <- fileExists path
+      if not exists then return False
+      else sameMode wanted <$> getMode path
+
 -- | Determines if @lastSync@ within @intervalDays@ of @now@.
 -- All times are POSIX seconds.
 isSyncFresh :: Int -> Integer -> Integer -> Bool
@@ -191,28 +235,40 @@ findOrCreateFilesFolder = do
       f <- orFail' "Failed to parse folder creation response" $ parseFolder bs
       return f.id
 
--- | Write each file item to disk.
--- Lock the files to 0600.
-writeFileItems :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => [(Text, Maybe Text)] -> m ()
-writeFileItems targets =
-  forM_ targets $ \(rawPath, mContent) -> do
+-- | Write each file item to disk with the given mode, returning the
+-- (expanded) paths written.
+writeFileItems :: (MonadIO m, MonadReader Settings m, MonadError WSError m) => Text -> [(Text, Maybe Text)] -> m [Text]
+writeFileItems fileMode targets =
+  fmap catMaybes $ forM targets $ \(rawPath, mContent) -> do
     expandedPath <- expandPath rawPath
     case mContent of
-      Nothing      -> putStrLn' $ "  Skipping " <> expandedPath <> " (no content)"
+      Nothing      -> do
+        putStrLn' $ "  Skipping " <> expandedPath <> " (no content)"
+        return Nothing
       Just content -> do
         putStrLn' $ "  Writing " <> expandedPath <> "..."
         ensureParentDir expandedPath
-        void $ fileContentsFix expandedPath content
-        void $ runCmd ["chmod", "0600", expandedPath] Prelude.id
+        -- newMode covers files created here; the chmod covers existing ones,
+        -- whose mode fileContentsFix otherwise preserves.
+        void $ fileContentsFixWith defaultFixOpts { newMode = Just fileMode } expandedPath content
+        currentMode <- getMode expandedPath
+        unless (sameMode fileMode currentMode) $
+          orFail ("chmod " <> fileMode <> " " <> expandedPath <> " failed") $
+            runCmd ["chmod", fileMode, expandedPath] Prelude.id
+        return (Just expandedPath)
 
 -- ---------------------------------------------------------------------------
 -- Prop instance
 
 instance Prop BitwardenSecretsP where
   desc _ = "Bitwarden secrets sync"
-  attrs p = Map.fromList [("syncIntervalDays", T.pack (show p.syncIntervalDays))]
+  attrs p = Map.fromList
+    [ ("syncIntervalDays", T.pack (show p.syncIntervalDays))
+    , ("mode", secretMode p)
+    ]
 
-  -- True iff bw is installed, creds exist, and last sync is still fresh.
+  -- True iff bw is installed, creds exist, last sync is still fresh, and every
+  -- file the last sync wrote still has the configured mode.
   checker p = do
     bwInstalled <- hasCmd' "bw"
     if not bwInstalled then return False
@@ -224,9 +280,10 @@ instance Prop BitwardenSecretsP where
       else do
         now      <- liftIO $ round <$> getPOSIXTime
         lastSync <- liftIO $ getLastSyncTs home
-        return $ isSyncFresh p.syncIntervalDays lastSync now
+        if not (isSyncFresh p.syncIntervalDays lastSync now) then return False
+        else getWrittenFiles home >>= filesHaveMode (secretMode p)
 
-  fixer _ = do
+  fixer p = do
     home <- liftIO $ getEnv "HOME"
     let creds = bwCredPaths home
 
@@ -257,7 +314,8 @@ instance Prop BitwardenSecretsP where
       -- save all bww items to disk
       let targets = fileItemTargets items
       putStrLn' $ "  Found " <> T.pack (show (length targets)) <> " file item(s) in vault"
-      writeFileItems targets
+      written <- writeFileItems (secretMode p) targets
+      saveWrittenFiles home written
 
     -- save sync timestamp
     liftIO $ saveLastSyncTs home

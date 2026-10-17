@@ -80,6 +80,18 @@ on the command line, so they do not show up in =ps=.
 
 =~/secrets/bw_email= is no longer read and can be deleted.
 
+Each secret written from the vault is set to mode =700=. To use a different
+mode, set ~mode~ (quoted, so YAML keeps it a string):
+#+begin_src yaml
+  - type: BitwardenSecrets
+    params:
+      syncIntervalDays: 7
+      mode: "600"
+#+end_src
+Each sync records the files it wrote. On later runs, if any of them is missing
+or has a different mode, the property runs again, even if the last sync is
+still within ~syncIntervalDays~.
+
 * Usage
 ** Initial system setup
 *** downloading

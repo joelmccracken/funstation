@@ -21,7 +21,7 @@ import Funstation.Properties.HomebrewBundle (HomebrewBundleP(..))
 -- Use BitwardenSecrets entries whose syncIntervalDays acts as a distinguishable label,
 -- so we can assert both selection and ordering.
 bw :: Int -> Property
-bw n = BitwardenSecrets (BitwardenSecretsP n)
+bw n = BitwardenSecrets (BitwardenSecretsP n Nothing)
 
 label :: Property -> Int
 label (BitwardenSecrets p) = syncIntervalDays p

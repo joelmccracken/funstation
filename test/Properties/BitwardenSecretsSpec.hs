@@ -10,6 +10,8 @@ import Data.Text qualified as T
 import System.Directory (createDirectoryIfMissing, doesPathExist, removeFile)
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.FilePath ((</>))
+import System.Posix.Files (fileMode, getFileStatus, setFileMode)
+import Data.Bits ((.&.))
 import Control.Exception (bracket, bracket_, try, throwIO, IOException)
 import Control.Monad.Except (throwError)
 import Control.Monad.IO.Class (liftIO)
@@ -44,7 +46,7 @@ writeAllCreds home = do
   writeFile creds.masterPassFile "hunter2"
 
 testProp :: BitwardenSecretsP
-testProp = BitwardenSecretsP { syncIntervalDays = 7 }
+testProp = BitwardenSecretsP { syncIntervalDays = 7, mode = Nothing }
 
 -- | Run 'withEnvVar' over an action that throws, for asserting on cleanup and
 -- on the propagated error. The result type is fixed here so call sites do not
@@ -175,25 +177,88 @@ spec = do
   describe "writeFileItems" $ do
     it "writes contents to the target path" $ withTempHome $ \home -> do
       let dest = home </> "written-secret"
-      runWS $ writeFileItems [(T.pack dest, Just "secret contents")]
+      _ <- runWS $ writeFileItems "700" [(T.pack dest, Just "secret contents")]
       shouldBeM "secret contents" $ readFile dest
 
     it "creates a missing parent directory" $ withTempHome $ \home -> do
       let dest = home </> ".ssh" </> "config"
-      runWS $ writeFileItems [(T.pack dest, Just "contents")]
+      _ <- runWS $ writeFileItems "700" [(T.pack dest, Just "contents")]
       shouldBeM "contents" $ readFile dest
 
     it "skips items with no contents" $ withTempHome $ \home -> do
       let dest = home </> "not-written"
-      runWS $ writeFileItems [(T.pack dest, Nothing)]
+      _ <- runWS $ writeFileItems "700" [(T.pack dest, Nothing)]
       shouldBeM False $ doesPathExist dest
 
     it "writes several items at once" $ withTempHome $ \home -> do
       let destA = home </> "a"
           destB = home </> "b"
-      runWS $ writeFileItems [(T.pack destA, Just "aaa"), (T.pack destB, Just "bbb")]
+      _ <- runWS $ writeFileItems "700" [(T.pack destA, Just "aaa"), (T.pack destB, Just "bbb")]
       shouldBeM "aaa" $ readFile destA
       shouldBeM "bbb" $ readFile destB
+
+    it "gives a new file the requested mode" $ withTempHome $ \home -> do
+      let dest = home </> "new-secret"
+      _ <- runWS $ writeFileItems "700" [(T.pack dest, Just "s")]
+      shouldBeM 0o700 $ (.&. 0o777) . fileMode <$> getFileStatus dest
+
+    it "resets the mode of an existing file" $ withTempHome $ \home -> do
+      let dest = home </> "old-secret"
+      writeFile dest "old"
+      setFileMode dest 0o644
+      _ <- runWS $ writeFileItems "700" [(T.pack dest, Just "new")]
+      shouldBeM 0o700 $ (.&. 0o777) . fileMode <$> getFileStatus dest
+
+    it "resets the mode even when the contents are unchanged" $ withTempHome $ \home -> do
+      let dest = home </> "same-secret"
+      writeFile dest "same"
+      setFileMode dest 0o644
+      _ <- runWS $ writeFileItems "700" [(T.pack dest, Just "same")]
+      shouldBeM 0o700 $ (.&. 0o777) . fileMode <$> getFileStatus dest
+
+    it "returns the paths it wrote, leaving out skipped items" $ withTempHome $ \home -> do
+      let destA = home </> "a"
+          destB = home </> "b"
+      shouldBeM [T.pack destA] $ runWS $
+        writeFileItems "700" [(T.pack destA, Just "aaa"), (T.pack destB, Nothing)]
+
+  describe "secretMode" $ do
+    it "defaults to 700" $
+      secretMode testProp `shouldBe` "700"
+
+    it "uses the configured mode when one is set" $
+      secretMode testProp { mode = Just "600" } `shouldBe` "600"
+
+  describe "sameMode" $ do
+    it "matches identical modes" $ sameMode "700" "700" `shouldBe` True
+    it "ignores a leading zero" $ sameMode "0700" "700" `shouldBe` True
+    it "distinguishes different modes" $ sameMode "700" "600" `shouldBe` False
+    it "never matches an unparseable mode" $ sameMode "rwx" "rwx" `shouldBe` False
+
+  describe "written files" $ do
+    it "round-trips the recorded paths" $ withTempHome $ \home -> do
+      saveWrittenFiles home ["/a/b", "/c"]
+      shouldBeM ["/a/b", "/c"] $ getWrittenFiles home
+
+    it "is empty when nothing has been recorded" $ withTempHome $ \home ->
+      shouldBeM [] $ getWrittenFiles home
+
+  describe "filesHaveMode" $ do
+    it "is True when every file has the mode" $ withTempHome $ \home -> do
+      let f = home </> "f"
+      writeFile f "x" >> setFileMode f 0o700
+      shouldBeM True $ filesHaveMode "700" [T.pack f]
+
+    it "is False when a file has a different mode" $ withTempHome $ \home -> do
+      let f = home </> "f"
+      writeFile f "x" >> setFileMode f 0o600
+      shouldBeM False $ filesHaveMode "700" [T.pack f]
+
+    it "is False when a file is missing" $ withTempHome $ \home ->
+      shouldBeM False $ filesHaveMode "700" [T.pack (home </> "gone")]
+
+    it "is True for no files" $
+      shouldBeM True $ filesHaveMode "700" []
 
   describe "withEnvVar" $ do
     it "sets the variable for the duration of the action" $
